@@ -1,4 +1,3 @@
-
 package com.innocodes.payflow.payment.service;
 
 import com.innocodes.payflow.payment.dto.request.CreatePaymentRequest;
@@ -24,6 +23,9 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import com.innocodes.payflow.payment.entity.OutboxEvent;
+import com.innocodes.payflow.payment.enums.OutboxEventStatus;
+import com.innocodes.payflow.payment.repository.OutboxEventRepository;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -53,6 +55,8 @@ class PaymentServiceIntegrationTest {
 
     @Autowired
     private PaymentService paymentService;
+    @Autowired
+    private OutboxEventRepository outboxEventRepository;
 
     @Autowired
     private PaymentRepository paymentRepository;
@@ -62,6 +66,7 @@ class PaymentServiceIntegrationTest {
 
     @BeforeEach
     void cleanDatabase() {
+        outboxEventRepository.deleteAll();
         idempotencyRecordRepository.deleteAll();
         paymentRepository.deleteAll();
     }
@@ -84,10 +89,17 @@ class PaymentServiceIntegrationTest {
         );
 
         // Assert
-        assertNotNull(response.paymentId());
-        assertEquals(PaymentStatus.PENDING, response.status());
-        assertEquals(1, paymentRepository.count());
-        assertEquals(1, idempotencyRecordRepository.count());
+        assertEquals(1, outboxEventRepository.count());
+
+        OutboxEvent outboxEvent = outboxEventRepository.findAll()
+                .getFirst();
+
+        assertEquals("PAYMENT", outboxEvent.getAggregateType());
+        assertEquals(response.paymentId(), outboxEvent.getAggregateId().toString());
+        assertEquals("PaymentInitiated", outboxEvent.getEventType());
+        assertEquals(OutboxEventStatus.PENDING, outboxEvent.getStatus());
+        assertNotNull(outboxEvent.getPayload());
+        assertNotNull(outboxEvent.getCreatedAt());
     }
 
     @Test
@@ -117,6 +129,7 @@ class PaymentServiceIntegrationTest {
         assertEquals(firstResponse.createdAt(), retryResponse.createdAt());
         assertEquals(1, paymentRepository.count());
         assertEquals(1, idempotencyRecordRepository.count());
+        assertEquals(1, outboxEventRepository.count());
     }
 
     @Test
@@ -231,6 +244,7 @@ class PaymentServiceIntegrationTest {
 
             assertEquals(1, paymentRepository.count());
             assertEquals(1, idempotencyRecordRepository.count());
+            assertEquals(1, outboxEventRepository.count());
 
         } finally {
             start.countDown();
@@ -273,6 +287,7 @@ class PaymentServiceIntegrationTest {
 
         assertEquals(1, paymentRepository.count());
         assertEquals(1, idempotencyRecordRepository.count());
+        assertEquals(1, outboxEventRepository.count());
     }
 
     @Test
@@ -299,6 +314,7 @@ class PaymentServiceIntegrationTest {
         assertEquals(firstResponse.paymentId(), retryResponse.paymentId());
         assertEquals(1, paymentRepository.count());
         assertEquals(1, idempotencyRecordRepository.count());
+        assertEquals(1, outboxEventRepository.count());
     }
 
 }
