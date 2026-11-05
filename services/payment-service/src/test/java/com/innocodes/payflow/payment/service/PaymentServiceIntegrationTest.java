@@ -2,7 +2,6 @@ package com.innocodes.payflow.payment.service;
 
 import com.innocodes.payflow.payment.dto.request.CreatePaymentRequest;
 import com.innocodes.payflow.payment.dto.response.PaymentResponse;
-import com.innocodes.payflow.payment.enums.PaymentStatus;
 import com.innocodes.payflow.payment.exception.IdempotencyKeyConflictException;
 import com.innocodes.payflow.payment.exception.PaymentReferenceConflictException;
 import com.innocodes.payflow.payment.repository.IdempotencyRecordRepository;
@@ -35,7 +34,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-@SpringBootTest
+@SpringBootTest(properties = {
+        "payflow.outbox.publisher.enabled=false"
+})
 @Testcontainers
 class PaymentServiceIntegrationTest {
 
