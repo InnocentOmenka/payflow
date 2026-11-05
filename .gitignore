@@ -1,0 +1,5 @@
+# Personal learning notes — never commit
+docs/learning-notes/
+
+# Maven build output
+**/target/
