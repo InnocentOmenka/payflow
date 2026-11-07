@@ -78,6 +78,12 @@
             <artifactId>spring-boot-starter-kafka</artifactId>
         </dependency>
 
+        <dependency>
+            <groupId>com.innocodes.payflow</groupId>
+            <artifactId>event-contracts</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
     </dependencies>
 
     <build>

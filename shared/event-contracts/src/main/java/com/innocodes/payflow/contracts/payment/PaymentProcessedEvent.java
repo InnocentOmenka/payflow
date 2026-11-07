@@ -1,17 +1,18 @@
-package com.innocodes.payflow.payment.dto.event;
+package com.innocodes.payflow.contracts.payment;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
-public record PaymentInitiatedEvent(
+public record PaymentProcessedEvent(
         UUID eventId,
         UUID paymentId,
         String merchantId,
         String reference,
         BigDecimal amount,
         String currency,
-        String description,
-        Instant occurredAt
+        String status,
+        String failureReason,
+        Instant processedAt
 ) {
 }

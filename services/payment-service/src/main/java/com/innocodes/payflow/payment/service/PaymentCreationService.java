@@ -2,8 +2,8 @@
 package com.innocodes.payflow.payment.service;
 
 
-import com.innocodes.payflow.payment.dto.event.PaymentInitiatedEvent;
 import com.innocodes.payflow.payment.dto.request.CreatePaymentRequest;
+import com.innocodes.payflow.contracts.payment.PaymentInitiatedEvent;
 import com.innocodes.payflow.payment.dto.response.PaymentResponse;
 import com.innocodes.payflow.payment.entity.IdempotencyRecord;
 import com.innocodes.payflow.payment.entity.OutboxEvent;
