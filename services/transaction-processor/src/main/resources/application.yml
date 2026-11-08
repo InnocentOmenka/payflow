@@ -31,7 +31,7 @@ spring:
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
 
     listener:
-      ack-mode: manual
+      ack-mode: manual_immediate
 
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
@@ -40,6 +40,8 @@ spring:
       retries: 10
       properties:
         enable.idempotence: true
+
+
 
 
 server:
