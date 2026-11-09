@@ -6,3 +6,5 @@ databaseChangeLog:
       file: db/changelog/changes/002-create-idempotency-records-table.yaml
   - include:
       file: db/changelog/changes/003-create-outbox-events-table.yaml
+  - include:
+      file: db/changelog/changes/004-create-processed-payment-events-table.yaml

@@ -30,6 +30,16 @@ spring:
       retries: 10
       properties:
         enable.idempotence: true
+    consumer:
+      group-id: payment-service-group
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+
+    listener:
+        ack-mode: manual
+
 
 server:
   port: 8081

@@ -96,4 +96,28 @@ public class Payment {
     public Instant getCreatedAt() {
         return createdAt;
     }
+
+    public void markAsSuccessful() {
+        if (status != PaymentStatus.PENDING
+                && status != PaymentStatus.PROCESSING) {
+            throw new IllegalStateException(
+                    "Cannot mark payment as successful from status: " + status
+            );
+        }
+
+        this.status = PaymentStatus.SUCCESSFUL;
+    }
+
+    public void markAsFailed() {
+        if (status != PaymentStatus.PENDING
+                && status != PaymentStatus.PROCESSING) {
+            throw new IllegalStateException(
+                    "Cannot mark payment as failed from status: " + status
+            );
+        }
+
+        this.status = PaymentStatus.FAILED;
+    }
+
+
 }
