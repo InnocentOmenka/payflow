@@ -23,6 +23,7 @@
 
     <modules>
         <module>shared/event-contracts</module>
+        <module>shared/webhook-support</module>
         <module>services/api-gateway</module>
         <module>services/merchant-service</module>
         <module>services/payment-service</module>
