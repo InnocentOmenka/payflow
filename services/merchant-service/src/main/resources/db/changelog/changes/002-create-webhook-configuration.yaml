@@ -1,0 +1,20 @@
+databaseChangeLog:
+  - changeSet:
+      id: 002-create-webhook-configuration
+      author: payflow
+      changes:
+        - sql:
+            sql: |
+              CREATE TABLE merchant_webhooks (
+                merchant_uuid UUID PRIMARY KEY REFERENCES merchants(id),
+                config_version BIGINT NOT NULL CHECK (config_version > 0),
+                destination_url VARCHAR(2048) NOT NULL,
+                enabled BOOLEAN NOT NULL,
+                secret_ref UUID,
+                secret_version BIGINT CHECK (secret_version > 0),
+                updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+                last_snapshot_at TIMESTAMP WITH TIME ZONE NOT NULL,
+                CHECK ((secret_ref IS NULL) = (secret_version IS NULL)),
+                CHECK (NOT enabled OR secret_ref IS NOT NULL)
+              );
+              CREATE INDEX idx_merchant_webhooks_snapshot ON merchant_webhooks(last_snapshot_at);

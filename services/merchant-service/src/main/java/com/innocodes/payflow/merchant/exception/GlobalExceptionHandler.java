@@ -88,6 +88,21 @@ public class GlobalExceptionHandler {
         return error(HttpStatus.NOT_FOUND, "Resource not found", request, List.of());
     }
 
+    @ExceptionHandler(org.springframework.web.server.ResponseStatusException.class)
+    public ResponseEntity<ApiErrorResponse> responseStatus(org.springframework.web.server.ResponseStatusException exception, HttpServletRequest request) {
+        return error(HttpStatus.valueOf(exception.getStatusCode().value()), exception.getReason(), request, List.of());
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ApiErrorResponse> invalidArgument(IllegalArgumentException exception, HttpServletRequest request) {
+        return error(HttpStatus.BAD_REQUEST, "Invalid webhook destination", request, List.of());
+    }
+
+    @ExceptionHandler(com.innocodes.payflow.webhook.SecretUnavailableException.class)
+    public ResponseEntity<ApiErrorResponse> secretUnavailable(Exception exception,HttpServletRequest request) {
+        return error(HttpStatus.SERVICE_UNAVAILABLE,"Signing secret provider is unavailable",request,List.of());
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiErrorResponse> unexpected(Exception exception, HttpServletRequest request) {
         org.slf4j.LoggerFactory.getLogger(GlobalExceptionHandler.class)

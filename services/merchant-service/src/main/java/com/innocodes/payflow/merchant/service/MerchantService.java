@@ -28,8 +28,10 @@ import java.util.UUID;
 @Validated
 public class MerchantService {
     private final MerchantRepository repository;
+    private final com.innocodes.payflow.merchant.webhook.WebhookConfigurationService webhooks;
 
-    public MerchantService(MerchantRepository repository) {
+    public MerchantService(MerchantRepository repository, com.innocodes.payflow.merchant.webhook.WebhookConfigurationService webhooks) {
+        this.webhooks=webhooks;
         this.repository = repository;
     }
 
@@ -107,6 +109,7 @@ public class MerchantService {
             default -> throw new IllegalArgumentException("Unsupported lifecycle operation");
         }
         repository.flush();
+        webhooks.merchantStatusChanged(merchant);
         return MerchantResponse.from(merchant);
     }
 

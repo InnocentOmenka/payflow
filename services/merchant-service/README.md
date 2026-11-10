@@ -138,3 +138,8 @@ Keycloak/access policy, audit history, verification/onboarding review, webhook c
 API credentials and merchant events are outside this checkpoint. Business email validation is
 syntactic, not proof of ownership. Contains-name filtering currently has no trigram index and
 offset pagination is not a snapshot across concurrent requests; revisit these at larger scale.
+
+## Checkpoint 2
+
+Durable webhook configuration, secret provisioning, transactional Kafka propagation and Notification
+projection are described in [WEBHOOKS.md](WEBHOOKS.md). Checkpoint 1 API and lifecycle behavior are retained.

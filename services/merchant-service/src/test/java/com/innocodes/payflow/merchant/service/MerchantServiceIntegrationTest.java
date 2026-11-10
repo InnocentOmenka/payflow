@@ -40,7 +40,7 @@ import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties={"payflow.merchant.outbox.enabled=false","spring.kafka.admin.auto-create=false"})
 @Testcontainers
 class MerchantServiceIntegrationTest {
     @Container @ServiceConnection
