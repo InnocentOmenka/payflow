@@ -1,0 +1,84 @@
+databaseChangeLog:
+  - changeSet:
+      id: 004-create-journal-lines-table
+      author: payflow
+      changes:
+        - createTable:
+            tableName: journal_lines
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+
+              - column:
+                  name: journal_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: ledger_account_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: entry_type
+                  type: VARCHAR(10)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: amount
+                  type: NUMERIC(19,2)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: created_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+
+        - addForeignKeyConstraint:
+            baseTableName: journal_lines
+            baseColumnNames: journal_id
+            referencedTableName: journals
+            referencedColumnNames: id
+            constraintName: fk_journal_lines_journal
+
+        - addForeignKeyConstraint:
+            baseTableName: journal_lines
+            baseColumnNames: ledger_account_id
+            referencedTableName: ledger_accounts
+            referencedColumnNames: id
+            constraintName: fk_journal_lines_account
+
+        - createIndex:
+            tableName: journal_lines
+            indexName: idx_journal_lines_journal_id
+            columns:
+              - column:
+                  name: journal_id
+
+        - createIndex:
+            tableName: journal_lines
+            indexName: idx_journal_lines_account_id
+            columns:
+              - column:
+                  name: ledger_account_id
+
+        - sql:
+            sql: |
+              ALTER TABLE journal_lines
+              ADD CONSTRAINT chk_journal_lines_entry_type
+              CHECK (entry_type IN ('DEBIT', 'CREDIT'));
+
+        - sql:
+            sql: |
+              ALTER TABLE journal_lines
+              ADD CONSTRAINT chk_journal_lines_positive_amount
+              CHECK (amount > 0);

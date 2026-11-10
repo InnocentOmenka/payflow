@@ -1,0 +1,34 @@
+databaseChangeLog:
+    - changeSet:
+          id: 002-seed-chart-of-accounts
+          author: payflow
+          changes:
+              - loadData:
+                    tableName: ledger_accounts
+                    file: db/changelog/data/initial-chart-of-accounts.csv
+                    relativeToChangelogFile: false
+                    separator: ","
+                    encoding: UTF-8
+                    quotchar: '"'
+                    columns:
+                        - column:
+                              name: id
+                              type: UUID
+                        - column:
+                              name: account_code
+                              type: STRING
+                        - column:
+                              name: name
+                              type: STRING
+                        - column:
+                              name: account_type
+                              type: STRING
+                        - column:
+                              name: currency
+                              type: STRING
+                        - column:
+                              name: status
+                              type: STRING
+                        - column:
+                              name: created_at
+                              type: STRING

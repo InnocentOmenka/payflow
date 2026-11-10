@@ -1,0 +1,107 @@
+databaseChangeLog:
+  - changeSet:
+      id: 003-create-journals-table
+      author: payflow
+      changes:
+        - createTable:
+            tableName: journals
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+
+              - column:
+                  name: payment_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: source_event_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: merchant_id
+                  type: VARCHAR(100)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: transaction_reference
+                  type: VARCHAR(255)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: journal_type
+                  type: VARCHAR(30)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: status
+                  type: VARCHAR(20)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: currency
+                  type: VARCHAR(3)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: description
+                  type: VARCHAR(500)
+
+              - column:
+                  name: posted_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: created_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+
+        - addUniqueConstraint:
+            tableName: journals
+            columnNames: payment_id, journal_type
+            constraintName: uk_journal_payment_type
+
+        - createIndex:
+            tableName: journals
+            indexName: idx_journals_merchant_id
+            columns:
+              - column:
+                  name: merchant_id
+
+        - createIndex:
+            tableName: journals
+            indexName: idx_journals_created_at
+            columns:
+              - column:
+                  name: created_at
+
+        - sql:
+            sql: |
+              ALTER TABLE journals
+              ADD CONSTRAINT chk_journals_status
+              CHECK (status = 'POSTED');
+
+        - sql:
+            sql: |
+              ALTER TABLE journals
+              ADD CONSTRAINT chk_journals_type
+              CHECK (journal_type IN (
+                'PAYMENT_CAPTURE',
+                'PAYMENT_REFUND',
+                'PAYMENT_REVERSAL'
+              ));

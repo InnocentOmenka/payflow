@@ -1,0 +1,15 @@
+databaseChangeLog:
+  - include:
+      file: db/changelog/changes/001-create-ledger-accounts-table.yaml
+
+  - include:
+      file: db/changelog/changes/002-seed-chart-of-accounts.yaml
+
+  - include:
+      file: db/changelog/changes/003-create-journals-table.yaml
+
+  - include:
+      file: db/changelog/changes/004-create-journal-lines-table.yaml
+
+  - include:
+      file: db/changelog/changes/005-create-processed-payment-events-table.yaml
