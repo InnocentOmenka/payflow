@@ -1,0 +1,45 @@
+spring:
+  application:
+    name: notification-service
+  datasource:
+    url: ${NOTIFICATION_DATABASE_URL:jdbc:postgresql://localhost:5432/payflow_notification}
+    username: ${NOTIFICATION_DATABASE_USERNAME:payflow_user}
+    password: ${NOTIFICATION_DATABASE_PASSWORD:payflow_local_password}
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: notification-service-group
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+      retries: 10
+      properties:
+        enable.idempotence: true
+    listener:
+      ack-mode: manual_immediate
+server:
+  port: 8084
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+payflow:
+  webhook:
+    worker-enabled: true
+    poll-interval-ms: 1000
+    max-attempts: 8
+    connect-timeout: 2s
+    response-timeout: 5s
+    request-timeout: 10s
+    lease-duration: 30s
+    initial-backoff: 5s
+    max-backoff: 1h
+    allow-local: false
