@@ -1,0 +1,30 @@
+databaseChangeLog:
+  - changeSet:
+      id: 001-create-merchants
+      author: payflow
+      changes:
+        - sql:
+            sql: |
+              CREATE TABLE merchants (
+                id UUID PRIMARY KEY,
+                merchant_id VARCHAR(100) NOT NULL,
+                business_name VARCHAR(200) NOT NULL,
+                business_email VARCHAR(254) NOT NULL,
+                contact_phone VARCHAR(30),
+                status VARCHAR(20) NOT NULL,
+                created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+                updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+                version BIGINT NOT NULL DEFAULT 0,
+                CONSTRAINT uk_merchants_merchant_id UNIQUE (merchant_id),
+                CONSTRAINT uk_merchants_business_email UNIQUE (business_email),
+                CONSTRAINT chk_merchants_identifier CHECK (merchant_id ~ '^MER-[A-Z0-9]+(-[A-Z0-9]+)*$'),
+                CONSTRAINT chk_merchants_name CHECK (business_name = btrim(business_name) AND length(business_name) > 0),
+                CONSTRAINT chk_merchants_email CHECK (business_email = lower(btrim(business_email))
+                  AND business_email ~ '^[^[:space:]@]+@[^[:space:]@]+$'),
+                CONSTRAINT chk_merchants_phone CHECK (contact_phone IS NULL OR contact_phone ~ '^\+?[0-9]{7,15}$'),
+                CONSTRAINT chk_merchants_status CHECK (status IN ('PENDING', 'ACTIVE', 'SUSPENDED', 'CLOSED')),
+                CONSTRAINT chk_merchants_version CHECK (version >= 0),
+                CONSTRAINT chk_merchants_timestamps CHECK (updated_at >= created_at)
+              );
+              CREATE INDEX idx_merchants_created_id ON merchants(created_at DESC, id);
+              CREATE INDEX idx_merchants_status_created_id ON merchants(status, created_at DESC, id);
