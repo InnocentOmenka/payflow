@@ -1,4 +1,4 @@
-"""Loopback-only development receiver. Requires WEBHOOK_SECRET (at least 32 bytes)."""
+"""Loopback-only dev receiver. Requires WEBHOOK_KEYS_FILE or WEBHOOK_SECRET (32+ bytes)."""
 import hashlib
 import hmac
 import json
@@ -6,9 +6,10 @@ import os
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-SECRET = os.environ["WEBHOOK_SECRET"].encode("utf-8")
-if len(SECRET) < 32:
-    raise SystemExit("WEBHOOK_SECRET must contain at least 32 bytes")
+KEYS_FILE = os.environ.get("WEBHOOK_KEYS_FILE")
+SECRET = os.environ.get("WEBHOOK_SECRET", "").encode("utf-8")
+if not KEYS_FILE and len(SECRET) < 32:
+    raise SystemExit("Provide WEBHOOK_KEYS_FILE or WEBHOOK_SECRET (at least 32 bytes)")
 
 
 class Receiver(BaseHTTPRequestHandler):
@@ -24,13 +25,21 @@ class Receiver(BaseHTTPRequestHandler):
             timestamp = self.headers.get("PayFlow-Webhook-Timestamp", "")
             if abs(time.time() - int(timestamp)) > 300:
                 raise ValueError("Expired signature")
-            expected = "v1=" + hmac.new(SECRET, timestamp.encode() + b"." + body, hashlib.sha256).hexdigest()
+            secret = SECRET
+            if KEYS_FILE:
+                with open(KEYS_FILE, encoding="utf-8") as key_file:
+                    keys = json.load(key_file)
+                key = keys[self.headers.get("PayFlow-Webhook-Key-Id", "")]
+                if str(key["version"]) != self.headers.get("PayFlow-Webhook-Key-Version"):
+                    raise ValueError("Key version mismatch")
+                secret = key["secret"].encode("utf-8")
+            expected = "v1=" + hmac.new(secret, timestamp.encode() + b"." + body, hashlib.sha256).hexdigest()
             if not hmac.compare_digest(expected, self.headers.get("PayFlow-Webhook-Signature", "")):
                 raise ValueError("Invalid signature")
             event = json.loads(body)
             if str(event["eventId"]) != self.headers.get("PayFlow-Webhook-Id"):
                 raise ValueError("Identity mismatch")
-            print(json.dumps({"eventId": event["eventId"], "status": event["status"], "signatureValid": True}), flush=True)
+            print(json.dumps({"eventId": event["eventId"], "status": event["status"], "signatureValid": True, "keyReference": self.headers.get("PayFlow-Webhook-Key-Id"), "keyVersion": self.headers.get("PayFlow-Webhook-Key-Version")}), flush=True)
             self.send_response(204)
         except (ValueError, KeyError):
             self.send_response(400)

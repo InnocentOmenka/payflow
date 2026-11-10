@@ -23,8 +23,8 @@ public class PaymentProcessedConsumer {
 
     @KafkaListener(
             id = "notification-payment-processed",
-            topics = KafkaTopicConfig.PAYMENT_PROCESSED_TOPIC,
-            groupId = "notification-service-group",
+            topics = "${payflow.kafka.payment-topic:payment-processed}",
+            groupId = "${payflow.kafka.payment-group:notification-service-group}",
             autoStartup = "${spring.kafka.listener.auto-startup:true}"
     )
     public void consume(ConsumerRecord<String, String> record, Acknowledgment acknowledgment) {

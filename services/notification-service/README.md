@@ -1,3 +1,9 @@
+> Checkpoint 2 update: Merchant Service now owns webhook destinations and key references.
+> Production resolution uses a durable Kafka-fed projection, not the temporary static map.
+> See [Merchant webhook configuration](../merchant-service/WEBHOOKS.md) for setup, two-phase rotation,
+> freshness/reconciliation, key-version headers, and production secret-manager boundaries.
+> Configuring the old static map now fails startup instead of overriding the projection.
+
 # Notification Service
 
 Consumes the shared `PaymentProcessedEvent` from `payment-processed` using
@@ -27,8 +33,8 @@ JDBC is intentional for explicit PostgreSQL locking and fenced updates. No cross
 relationships or changes to the shared event contract are introduced.
 
 `destination_ref` is the merchant ID, resolved at delivery time through
-`MerchantWebhookDestinationResolver`. The configured adapter is isolated so a Merchant API
-or local configuration projection can replace it. URL/secret changes affect future retries;
+`MerchantWebhookDestinationResolver`. The database-backed adapter consumes Merchant configuration
+events and resolves referenced keys without per-delivery Merchant API calls. URL/secret changes affect future retries;
 configuration is not persisted in notification rows. Missing destinations remain durable and
 retry until exhaustion. Replays never reset attempts, state, destination reference or body.
 
@@ -85,23 +91,9 @@ it). Configure `NOTIFICATION_DATABASE_URL`, `NOTIFICATION_DATABASE_USERNAME`,
 only this service's additive migrations. Compose currently provides the shared local broker
 and PostgreSQL server; it does not provision service-specific databases automatically.
 
-An external, untracked configuration file can contain:
-
-```yaml
-payflow:
-  webhook:
-    merchants:
-      "[MER-1001]":
-        url: http://127.0.0.1:8090/webhook
-        secret: ${WEBHOOK_SECRET}
-```
-
-The brackets preserve case and punctuation in Spring map keys. For local use, supply
-`SPRING_PROFILES_ACTIVE=dev`, `PAYFLOW_WEBHOOK_ALLOW_LOCAL=true`, and
-`SPRING_CONFIG_ADDITIONAL_LOCATION=file:/absolute/path/to/local-webhooks.yml`.
-Run `WEBHOOK_SECRET` through your environment and launch `python3 dev/mock_merchant.py`.
-The mock verifies the timestamp/signature and reports only event ID and status. It is a
-verification aid, not a durable merchant application. It does not implement receiver deduplication.
+Configure Merchant's durable webhook API and the development secret provider as described in the
+Checkpoint 2 guide. For the mock receiver, use a private `WEBHOOK_KEYS_FILE` populated from the one-time
+provisioning response. No signing keys or destinations are loaded from a static production map.
 
 The service defaults to port 8084. `payflow.webhook.worker-enabled=false` disables only the
 worker. `spring.kafka.listener.auto-startup=false` plus `spring.kafka.admin.auto-create=false`

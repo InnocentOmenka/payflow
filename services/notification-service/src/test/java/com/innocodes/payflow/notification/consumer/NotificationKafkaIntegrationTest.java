@@ -57,10 +57,10 @@ import static org.mockito.Mockito.*;
 
 @SpringBootTest(properties = {"payflow.kafka.retry.interval-ms=100", "payflow.webhook.poll-interval-ms=50",
         "payflow.webhook.allow-local=true"})
-@ActiveProfiles("dev")
+@ActiveProfiles({"dev","test-static-webhooks"})
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 @Testcontainers
-@Import(NotificationKafkaIntegrationTest.Topics.class)
+@Import({NotificationKafkaIntegrationTest.Topics.class,com.innocodes.payflow.notification.support.StaticTestDestinations.class})
 class NotificationKafkaIntegrationTest {
     @Container @ServiceConnection
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:17");
@@ -80,6 +80,9 @@ class NotificationKafkaIntegrationTest {
 
     @TestConfiguration
     static class Topics {
+        @Bean NewTopic merchantConfiguration() {
+            return TopicBuilder.name("merchant-webhook-config").partitions(3).replicas(1).build();
+        }
         @Bean NewTopic paymentProcessed() {
             return TopicBuilder.name(KafkaTopicConfig.PAYMENT_PROCESSED_TOPIC).partitions(3).replicas(1).build();
         }
@@ -193,6 +196,35 @@ class NotificationKafkaIntegrationTest {
         verify(notifications, times(4)).insert(eq(e.eventId()), any(), anyString(), anyString(), anyString(), anyString());
         assertTrue(notifications.findById(e.eventId()).isEmpty());
         assertTrue(merchant.received.stream().noneMatch(r -> r.body().contains(e.eventId().toString())));
+    }
+
+    @Autowired com.innocodes.payflow.notification.merchant.MerchantProjectionService projection;
+    @Test void shouldConsumeDuplicateAndOutOfOrderMerchantConfigurationOverKafka() throws Exception {
+        String merchantId=("MER-"+UUID.randomUUID()).toUpperCase(java.util.Locale.ROOT);
+        var now=Instant.now();
+        var newest=new com.innocodes.payflow.contracts.merchant.MerchantWebhookConfigurationEvent(UUID.randomUUID(),merchantId,2,
+                merchant.url().toString(),false,"SUSPENDED",null,null,now);
+        template.send("merchant-webhook-config",merchantId,mapper.writeValueAsString(newest)).get(10,TimeUnit.SECONDS);
+        template.send("merchant-webhook-config",merchantId,mapper.writeValueAsString(newest)).get(10,TimeUnit.SECONDS);
+        var old=new com.innocodes.payflow.contracts.merchant.MerchantWebhookConfigurationEvent(UUID.randomUUID(),merchantId,1,
+                merchant.url().toString(),false,"PENDING",null,null,now);
+        template.send("merchant-webhook-config",merchantId,mapper.writeValueAsString(old)).get(10,TimeUnit.SECONDS);
+        await().atMost(Duration.ofSeconds(15)).until(()->jdbc.queryForObject("SELECT count(*) FROM merchant_configuration_receipts WHERE merchant_id=?",Integer.class,merchantId)==2);
+        assertEquals(2,jdbc.queryForObject("SELECT config_version FROM merchant_webhook_projection WHERE merchant_id=?",Long.class,merchantId));
+        assertEquals("SUSPENDED",jdbc.queryForObject("SELECT merchant_status FROM merchant_webhook_projection WHERE merchant_id=?",String.class,merchantId));
+    }
+    @Test void shouldDeadLetterMalformedMerchantConfiguration() throws Exception {
+        try(var consumer=new KafkaConsumer<String,String>(Map.of("bootstrap.servers",kafka.getBootstrapServers(),"group.id","config-dlt-"+UUID.randomUUID(),"enable.auto.commit",false),new StringDeserializer(),new StringDeserializer())) {
+            String topic="merchant-webhook-config-notification-dlt";
+            var partitions=List.of(new TopicPartition(topic,0),new TopicPartition(topic,1),new TopicPartition(topic,2));
+            consumer.assign(partitions);consumer.seekToBeginning(partitions);
+            String id="MER-"+UUID.randomUUID();
+            template.send("merchant-webhook-config",id,"{broken").get(10,TimeUnit.SECONDS);
+            await().atMost(Duration.ofSeconds(15)).until(()->{
+                for(var record:consumer.poll(Duration.ofMillis(100)))if(id.equals(record.key()))return true;
+                return false;
+            });
+        }
     }
 
     private void delivered(PaymentProcessedEvent e) {

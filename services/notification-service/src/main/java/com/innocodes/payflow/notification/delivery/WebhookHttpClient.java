@@ -42,6 +42,8 @@ public class WebhookHttpClient implements AutoCloseable {
         MerchantWebhookDestinationResolver.Destination destination;
         try {
             destination = resolver.resolve(notification.destinationRef());
+        } catch (com.innocodes.payflow.notification.merchant.DestinationUnavailableException exception) {
+            return failure(start,exception.getMessage(),exception.retryable());
         } catch (IllegalStateException exception) {
             return failure(start, "DESTINATION_NOT_CONFIGURED", true);
         }
@@ -56,6 +58,10 @@ public class WebhookHttpClient implements AutoCloseable {
         post.setHeader("PayFlow-Webhook-Id", notification.eventId().toString());
         post.setHeader("PayFlow-Webhook-Timestamp", timestamp);
         post.setHeader("PayFlow-Webhook-Signature", WebhookSigner.sign(destination.secret(), timestamp, notification.webhookPayload()));
+        if(destination.secretReference()!=null) {
+            post.setHeader("PayFlow-Webhook-Key-Id",destination.secretReference().toString());
+            post.setHeader("PayFlow-Webhook-Key-Version",destination.secretVersion().toString());
+        }
         post.setEntity(new StringEntity(notification.webhookPayload(), ContentType.APPLICATION_JSON));
         var task = requests.submit(() -> send(post, destination));
         try {

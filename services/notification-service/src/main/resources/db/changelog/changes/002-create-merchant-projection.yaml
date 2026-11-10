@@ -1,0 +1,30 @@
+databaseChangeLog:
+  - changeSet:
+      id: 002-create-merchant-projection
+      author: payflow
+      changes:
+        - sql:
+            sql: |
+              CREATE TABLE merchant_webhook_projection (
+                merchant_id VARCHAR(100) PRIMARY KEY,
+                config_version BIGINT NOT NULL CHECK(config_version>0),
+                destination_url VARCHAR(2048) NOT NULL,
+                enabled BOOLEAN NOT NULL,
+                merchant_status VARCHAR(20) NOT NULL CHECK(merchant_status IN ('PENDING','ACTIVE','SUSPENDED','CLOSED')),
+                secret_ref UUID,
+                secret_version BIGINT CHECK(secret_version>0),
+                canonical_payload TEXT NOT NULL,
+                confirmed_at TIMESTAMP WITH TIME ZONE NOT NULL,
+                secret_ready BOOLEAN NOT NULL DEFAULT FALSE,
+                updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                CHECK ((secret_ref IS NULL)=(secret_version IS NULL)),
+                CHECK (NOT enabled OR secret_ref IS NOT NULL)
+              );
+              CREATE TABLE merchant_configuration_receipts (
+                event_id UUID PRIMARY KEY,
+                merchant_id VARCHAR(100) NOT NULL,
+                config_version BIGINT NOT NULL,
+                payload TEXT NOT NULL,
+                recorded_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+              );
+              CREATE INDEX idx_merchant_configuration_receipts_merchant ON merchant_configuration_receipts(merchant_id,config_version);

@@ -45,7 +45,8 @@ import static org.mockito.Mockito.doAnswer;
         "payflow.webhook.connect-timeout=100ms", "payflow.webhook.response-timeout=100ms",
         "payflow.webhook.request-timeout=300ms", "payflow.webhook.lease-duration=2s",
         "payflow.webhook.initial-backoff=100ms", "payflow.webhook.max-backoff=1s"})
-@ActiveProfiles("dev")
+@ActiveProfiles({"dev","test-static-webhooks"})
+@org.springframework.context.annotation.Import(com.innocodes.payflow.notification.support.StaticTestDestinations.class)
 @Testcontainers
 class NotificationDeliveryIntegrationTest {
     @Container
