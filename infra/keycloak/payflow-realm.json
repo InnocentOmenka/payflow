@@ -1,0 +1,648 @@
+{
+  "realm": "payflow",
+  "enabled": true,
+  "displayName": "PayFlow LOCAL DEVELOPMENT",
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": false,
+  "rememberMe": false,
+  "loginWithEmailAllowed": false,
+  "duplicateEmailsAllowed": false,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": true,
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "revokeRefreshToken": true,
+  "refreshTokenMaxReuse": 0,
+  "defaultSignatureAlgorithm": "RS256",
+  "defaultDefaultClientScopes": [],
+  "defaultOptionalClientScopes": [],
+  "roles": {
+    "client": {
+      "payflow-merchant-api": [
+        {
+          "name": "merchant-admin",
+          "composite": false
+        },
+        {
+          "name": "merchant-operator",
+          "composite": false
+        },
+        {
+          "name": "platform-admin",
+          "composite": false
+        },
+        {
+          "name": "access-resolver",
+          "composite": false
+        }
+      ],
+      "payflow-payment-api": [
+        {
+          "name": "merchant-admin",
+          "composite": false
+        },
+        {
+          "name": "merchant-operator",
+          "composite": false
+        }
+      ]
+    }
+  },
+  "clients": [
+    {
+      "clientId": "payflow-merchant-api",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "bearerOnly": true,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "fullScopeAllowed": false,
+      "defaultClientScopes": [],
+      "optionalClientScopes": [],
+      "redirectUris": [],
+      "webOrigins": [],
+      "attributes": {
+        "oauth2.device.authorization.grant.enabled": "false",
+        "oidc.ciba.grant.enabled": "false",
+        "oauth2.token.exchange.grant.enabled": "false"
+      }
+    },
+    {
+      "clientId": "payflow-payment-api",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "bearerOnly": true,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "fullScopeAllowed": false,
+      "defaultClientScopes": [],
+      "optionalClientScopes": [],
+      "redirectUris": [],
+      "webOrigins": [],
+      "attributes": {
+        "oauth2.device.authorization.grant.enabled": "false",
+        "oidc.ciba.grant.enabled": "false",
+        "oauth2.token.exchange.grant.enabled": "false"
+      }
+    },
+    {
+      "clientId": "payflow-portal",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "bearerOnly": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "fullScopeAllowed": false,
+      "defaultClientScopes": [],
+      "optionalClientScopes": [
+        "merchant.read",
+        "merchant.profile.write",
+        "webhook.read",
+        "webhook.manage",
+        "webhook.key.provision",
+        "payment.read",
+        "payment.create"
+      ],
+      "redirectUris": [
+        "http://localhost:8181/callback"
+      ],
+      "webOrigins": [
+        "http://localhost:8181"
+      ],
+      "attributes": {
+        "oauth2.device.authorization.grant.enabled": "false",
+        "oidc.ciba.grant.enabled": "false",
+        "oauth2.token.exchange.grant.enabled": "false",
+        "pkce.code.challenge.method": "S256"
+      }
+    },
+    {
+      "clientId": "payflow-platform-console",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "bearerOnly": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "fullScopeAllowed": false,
+      "defaultClientScopes": [],
+      "optionalClientScopes": [
+        "merchant.read",
+        "merchant.profile.write",
+        "merchant.lifecycle.manage",
+        "merchant.bindings.manage",
+        "webhook.read",
+        "webhook.manage",
+        "webhook.key.provision"
+      ],
+      "redirectUris": [
+        "http://localhost:8182/callback"
+      ],
+      "webOrigins": [
+        "http://localhost:8182"
+      ],
+      "attributes": {
+        "oauth2.device.authorization.grant.enabled": "false",
+        "oidc.ciba.grant.enabled": "false",
+        "oauth2.token.exchange.grant.enabled": "false",
+        "pkce.code.challenge.method": "S256"
+      }
+    },
+    {
+      "clientId": "payflow-payment-service",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "bearerOnly": false,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "fullScopeAllowed": false,
+      "defaultClientScopes": [
+        "merchant.access.resolve"
+      ],
+      "optionalClientScopes": [],
+      "redirectUris": [],
+      "webOrigins": [],
+      "attributes": {
+        "oauth2.device.authorization.grant.enabled": "false",
+        "oidc.ciba.grant.enabled": "false",
+        "oauth2.token.exchange.grant.enabled": "false"
+      },
+      "clientAuthenticatorType": "client-secret",
+      "secret": "${PAYFLOW_PAYMENT_SERVICE_SECRET}"
+    }
+  ],
+  "clientScopes": [
+    {
+      "name": "merchant.read",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true"
+      },
+      "protocolMappers": [
+        {
+          "name": "audience-payflow-merchant-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "payflow-merchant-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        },
+        {
+          "name": "roles-payflow-merchant-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-client-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "usermodel.clientRoleMapping.clientId": "payflow-merchant-api",
+            "claim.name": "resource_access.payflow-merchant-api.roles",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "userinfo.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "name": "merchant.profile.write",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true"
+      },
+      "protocolMappers": [
+        {
+          "name": "audience-payflow-merchant-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "payflow-merchant-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        },
+        {
+          "name": "roles-payflow-merchant-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-client-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "usermodel.clientRoleMapping.clientId": "payflow-merchant-api",
+            "claim.name": "resource_access.payflow-merchant-api.roles",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "userinfo.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "name": "merchant.lifecycle.manage",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true"
+      },
+      "protocolMappers": [
+        {
+          "name": "audience-payflow-merchant-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "payflow-merchant-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        },
+        {
+          "name": "roles-payflow-merchant-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-client-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "usermodel.clientRoleMapping.clientId": "payflow-merchant-api",
+            "claim.name": "resource_access.payflow-merchant-api.roles",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "userinfo.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "name": "merchant.bindings.manage",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true"
+      },
+      "protocolMappers": [
+        {
+          "name": "audience-payflow-merchant-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "payflow-merchant-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        },
+        {
+          "name": "roles-payflow-merchant-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-client-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "usermodel.clientRoleMapping.clientId": "payflow-merchant-api",
+            "claim.name": "resource_access.payflow-merchant-api.roles",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "userinfo.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "name": "webhook.read",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true"
+      },
+      "protocolMappers": [
+        {
+          "name": "audience-payflow-merchant-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "payflow-merchant-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        },
+        {
+          "name": "roles-payflow-merchant-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-client-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "usermodel.clientRoleMapping.clientId": "payflow-merchant-api",
+            "claim.name": "resource_access.payflow-merchant-api.roles",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "userinfo.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "name": "webhook.manage",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true"
+      },
+      "protocolMappers": [
+        {
+          "name": "audience-payflow-merchant-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "payflow-merchant-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        },
+        {
+          "name": "roles-payflow-merchant-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-client-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "usermodel.clientRoleMapping.clientId": "payflow-merchant-api",
+            "claim.name": "resource_access.payflow-merchant-api.roles",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "userinfo.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "name": "webhook.key.provision",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true"
+      },
+      "protocolMappers": [
+        {
+          "name": "audience-payflow-merchant-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "payflow-merchant-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        },
+        {
+          "name": "roles-payflow-merchant-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-client-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "usermodel.clientRoleMapping.clientId": "payflow-merchant-api",
+            "claim.name": "resource_access.payflow-merchant-api.roles",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "userinfo.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "name": "merchant.access.resolve",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true"
+      },
+      "protocolMappers": [
+        {
+          "name": "audience-payflow-merchant-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "payflow-merchant-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        },
+        {
+          "name": "roles-payflow-merchant-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-client-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "usermodel.clientRoleMapping.clientId": "payflow-merchant-api",
+            "claim.name": "resource_access.payflow-merchant-api.roles",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "userinfo.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "name": "payment.read",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true"
+      },
+      "protocolMappers": [
+        {
+          "name": "audience-payflow-payment-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "payflow-payment-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        },
+        {
+          "name": "roles-payflow-payment-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-client-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "usermodel.clientRoleMapping.clientId": "payflow-payment-api",
+            "claim.name": "resource_access.payflow-payment-api.roles",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "userinfo.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "name": "payment.create",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true"
+      },
+      "protocolMappers": [
+        {
+          "name": "audience-payflow-payment-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "payflow-payment-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        },
+        {
+          "name": "roles-payflow-payment-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-client-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "usermodel.clientRoleMapping.clientId": "payflow-payment-api",
+            "claim.name": "resource_access.payflow-payment-api.roles",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "userinfo.token.claim": "false"
+          }
+        }
+      ]
+    }
+  ],
+  "clientScopeMappings": {
+    "payflow-merchant-api": [
+      {
+        "clientScope": "merchant.read",
+        "roles": [
+          "merchant-admin",
+          "merchant-operator",
+          "platform-admin"
+        ]
+      },
+      {
+        "clientScope": "merchant.profile.write",
+        "roles": [
+          "merchant-admin",
+          "platform-admin"
+        ]
+      },
+      {
+        "clientScope": "merchant.lifecycle.manage",
+        "roles": [
+          "platform-admin"
+        ]
+      },
+      {
+        "clientScope": "merchant.bindings.manage",
+        "roles": [
+          "platform-admin"
+        ]
+      },
+      {
+        "clientScope": "webhook.read",
+        "roles": [
+          "merchant-admin",
+          "platform-admin"
+        ]
+      },
+      {
+        "clientScope": "webhook.manage",
+        "roles": [
+          "merchant-admin",
+          "platform-admin"
+        ]
+      },
+      {
+        "clientScope": "webhook.key.provision",
+        "roles": [
+          "merchant-admin",
+          "platform-admin"
+        ]
+      },
+      {
+        "clientScope": "merchant.access.resolve",
+        "roles": [
+          "access-resolver"
+        ]
+      }
+    ],
+    "payflow-payment-api": [
+      {
+        "clientScope": "payment.read",
+        "roles": [
+          "merchant-admin",
+          "merchant-operator"
+        ]
+      },
+      {
+        "clientScope": "payment.create",
+        "roles": [
+          "merchant-admin",
+          "merchant-operator"
+        ]
+      }
+    ]
+  },
+  "users": [
+    {
+      "username": "service-account-payflow-payment-service",
+      "enabled": true,
+      "serviceAccountClientId": "payflow-payment-service",
+      "clientRoles": {
+        "payflow-merchant-api": [
+          "access-resolver"
+        ]
+      }
+    }
+  ]
+}

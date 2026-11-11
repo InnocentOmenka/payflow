@@ -3,3 +3,14 @@ docs/learning-notes/
 
 # Maven build output
 **/target/
+
+# Isolated local identity credentials and Python cache
+.env.keycloak.local
+infra/keycloak/**/__pycache__/
+
+# Python caches and bytecode
+__pycache__/
+*.pyc
+
+# Local private artifacts
+.local-private/
