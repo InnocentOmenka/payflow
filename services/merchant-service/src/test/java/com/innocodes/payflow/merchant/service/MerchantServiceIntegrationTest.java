@@ -11,7 +11,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -26,10 +25,6 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
@@ -40,7 +35,7 @@ import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties={"payflow.merchant.outbox.enabled=false","spring.kafka.admin.auto-create=false"})
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK, properties={"payflow.merchant.outbox.enabled=false","spring.kafka.admin.auto-create=false"})
 @Testcontainers
 class MerchantServiceIntegrationTest {
     @Container @ServiceConnection
@@ -51,16 +46,21 @@ class MerchantServiceIntegrationTest {
     @Autowired JdbcTemplate jdbc;
     @Autowired PlatformTransactionManager transactions;
     @Autowired JsonMapper mapper;
-    @Value("${local.server.port}") int port;
-    private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();
+    private org.springframework.test.web.servlet.MockMvc controllerMvc;
 
     @BeforeEach
     void cleanIsolatedContainerDatabase() {
         repository.deleteAll(); // Only this test class's disposable PostgreSQL container.
+        // Controller/validation + real database contract only. Runtime HTTP is tested separately
+        // with the real security filters, which deny every business request in Slice 2.
+        controllerMvc = org.springframework.test.web.servlet.setup.MockMvcBuilders
+                .standaloneSetup(new com.innocodes.payflow.merchant.controller.MerchantController(service))
+                .setControllerAdvice(new com.innocodes.payflow.merchant.exception.GlobalExceptionHandler())
+                .build();
     }
 
     @Test
-    void shouldRegisterRetrieveAndNormalizeMerchantThroughHttp() throws Exception {
+    void shouldRegisterRetrieveAndNormalizeMerchantThroughController() throws Exception {
         var request = new RegisterMerchantRequest(" mer-1001 ", " Example Business ", " Owner@Example.com ", "+2348012345678");
         var response = request("POST", "", request);
         assertEquals(201, response.statusCode());
@@ -318,20 +318,27 @@ class MerchantServiceIntegrationTest {
         return new RegisterMerchantRequest("MER-" + suffix, "Business " + suffix, suffix + "@example.com", "+2348012345678");
     }
 
-    private HttpResponse<String> request(String method, String path, Object body) throws Exception {
+    private ControllerResponse request(String method, String path, Object body) throws Exception {
         return raw(method, path, body == null ? null : mapper.writeValueAsString(body));
     }
 
-    private HttpResponse<String> raw(String method, String path, String body) throws Exception {
-        return http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1/merchants" + path))
-                .timeout(Duration.ofSeconds(5)).header("Content-Type", "application/json")
-                .method(method, body == null ? HttpRequest.BodyPublishers.noBody() : HttpRequest.BodyPublishers.ofString(body))
-                .build(), HttpResponse.BodyHandlers.ofString());
+    private ControllerResponse raw(String method, String path, String body) throws Exception {
+        var request = org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                .request(org.springframework.http.HttpMethod.valueOf(method), URI.create("/api/v1/merchants" + path))
+                .contentType("application/json");
+        if (body != null) request.content(body);
+        var response = controllerMvc.perform(request).andReturn().getResponse();
+        var headers = new java.util.HashMap<String, java.util.List<String>>();
+        response.getHeaderNames().forEach(name -> headers.put(name, response.getHeaders(name)));
+        return new ControllerResponse(response.getStatus(), response.getContentAsString(),
+                java.net.http.HttpHeaders.of(headers, (name, value) -> true));
     }
 
-    private JsonNode json(HttpResponse<String> response) { return mapper.readTree(response.body()); }
+    private record ControllerResponse(int statusCode, String body, java.net.http.HttpHeaders headers) {}
 
-    private void assertError(HttpResponse<String> response, int status) {
+    private JsonNode json(ControllerResponse response) { return mapper.readTree(response.body()); }
+
+    private void assertError(ControllerResponse response, int status) {
         assertEquals(status, response.statusCode(), response.body());
         var error = json(response);
         assertEquals(status, error.get("status").asInt());

@@ -17,6 +17,7 @@
     <description>Double-entry accounting and financial ledger management</description>
 
     <dependencies>
+        <dependency><groupId>com.innocodes.payflow</groupId><artifactId>security-support</artifactId><version>${project.version}</version></dependency>
         <!-- REST APIs for ledger queries -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

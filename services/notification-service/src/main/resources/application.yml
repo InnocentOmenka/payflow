@@ -1,4 +1,11 @@
 spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${PAYFLOW_JWT_ISSUER:http://localhost:8180/realms/payflow}
+          jwk-set-uri: ${PAYFLOW_JWT_JWK_SET_URI:http://localhost:8180/realms/payflow/protocol/openid-connect/certs}
+          audiences: payflow-notification-api
   application:
     name: notification-service
   datasource:
@@ -27,6 +34,10 @@ spring:
 server:
   port: 8084
 management:
+  endpoint:
+    health:
+      show-details: never
+      show-components: never
   endpoints:
     web:
       exposure:

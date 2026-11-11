@@ -1,0 +1,1781 @@
+{
+  "info": {
+    "name": "PayFlow \u2014 Slice 2 fail-closed HTTP validation",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Local manual validation only. Read README.md first. Business requests MUST return 401/403. Token helpers never belong in shared exports. No Origin header, no cookies, desktop agent."
+  },
+  "auth": {
+    "type": "noauth"
+  },
+  "item": [
+    {
+      "name": "00 \u2014 Token setup (send individually; do not run this folder)",
+      "item": [
+        {
+          "name": "Optional \u2014 Merchant token via restricted Payment service account",
+          "request": {
+            "method": "POST",
+            "url": "{{keycloak_issuer}}/protocol/openid-connect/token",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "grant_type",
+                  "value": "client_credentials",
+                  "type": "text"
+                },
+                {
+                  "key": "client_id",
+                  "value": "payflow-payment-service",
+                  "type": "text"
+                },
+                {
+                  "key": "client_secret",
+                  "value": "{{payment_service_client_secret}}",
+                  "type": "text"
+                },
+                {
+                  "key": "scope",
+                  "value": "merchant.access.resolve",
+                  "type": "text"
+                }
+              ]
+            },
+            "description": "Merchant audience ONLY. Enter private development secret locally; never sync/export it. No Payment API audience can be requested."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get(\"payment_service_client_secret\")) throw new Error(\"Set the development client secret privately first\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Token issued\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  " const body = pm.response.json();",
+                  " pm.test(\"Bearer access token\", () => { pm.expect(body.token_type.toLowerCase()).to.eql(\"bearer\"); pm.expect(body.expires_in).to.be.above(0); });",
+                  " pm.environment.set(\"merchant_token\", body.access_token);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Merchant API token \u2014 exchange browser PKCE code",
+          "request": {
+            "method": "POST",
+            "url": "{{keycloak_issuer}}/protocol/openid-connect/token",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "grant_type",
+                  "value": "authorization_code",
+                  "type": "text"
+                },
+                {
+                  "key": "client_id",
+                  "value": "payflow-portal",
+                  "type": "text"
+                },
+                {
+                  "key": "redirect_uri",
+                  "value": "http://localhost:8181/callback",
+                  "type": "text"
+                },
+                {
+                  "key": "code",
+                  "value": "{{merchant_authorization_code}}",
+                  "type": "text"
+                },
+                {
+                  "key": "code_verifier",
+                  "value": "{{merchant_code_verifier}}",
+                  "type": "text"
+                }
+              ]
+            },
+            "description": "Read README: use a generated authorization URL, log in through Keycloak, then copy the failed-loopback callback URL locally. Do not use Postman default callbacks. Codes are short-lived and single use."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const callback = pm.environment.get(\"merchant_callback_url\") || \"\";",
+                  "const prefix = \"http://localhost:8181/callback?\";",
+                  "if (!callback.startsWith(prefix)) throw new Error(\"Paste the exact registered local callback URL\");",
+                  "const params = {};",
+                  "for (const part of callback.slice(prefix.length).split(\"&\")) {",
+                  " const i = part.indexOf(\"=\");",
+                  " const key = decodeURIComponent(i < 0 ? part : part.slice(0, i));",
+                  " const value = decodeURIComponent((i < 0 ? \"\" : part.slice(i+1)).replace(/\\+/g, \" \"));",
+                  " if (Object.prototype.hasOwnProperty.call(params, key)) throw new Error(\"Duplicate callback parameter\");",
+                  " params[key] = value;",
+                  "}",
+                  "const state = pm.environment.get(\"merchant_state\");",
+                  "if (!state || params.state !== state || !params.code || params.error) throw new Error(\"Missing code or invalid OAuth state\");",
+                  "if (!pm.environment.get(\"merchant_code_verifier\")) throw new Error(\"Generate the private PKCE session first\");",
+                  "pm.variables.set(\"merchant_authorization_code\", params.code);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"PKCE code exchanged\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  " const body = pm.response.json();",
+                  " pm.test(\"Bearer token\", () => pm.expect(body.token_type.toLowerCase()).to.eql(\"bearer\"));",
+                  " pm.environment.set(\"merchant_token\", body.access_token);",
+                  " pm.environment.unset(\"merchant_callback_url\");",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Payment API token \u2014 exchange browser PKCE code",
+          "request": {
+            "method": "POST",
+            "url": "{{keycloak_issuer}}/protocol/openid-connect/token",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "grant_type",
+                  "value": "authorization_code",
+                  "type": "text"
+                },
+                {
+                  "key": "client_id",
+                  "value": "payflow-portal",
+                  "type": "text"
+                },
+                {
+                  "key": "redirect_uri",
+                  "value": "http://localhost:8181/callback",
+                  "type": "text"
+                },
+                {
+                  "key": "code",
+                  "value": "{{payment_authorization_code}}",
+                  "type": "text"
+                },
+                {
+                  "key": "code_verifier",
+                  "value": "{{payment_code_verifier}}",
+                  "type": "text"
+                }
+              ]
+            },
+            "description": "Read README: use a generated authorization URL, log in through Keycloak, then copy the failed-loopback callback URL locally. Do not use Postman default callbacks. Codes are short-lived and single use."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const callback = pm.environment.get(\"payment_callback_url\") || \"\";",
+                  "const prefix = \"http://localhost:8181/callback?\";",
+                  "if (!callback.startsWith(prefix)) throw new Error(\"Paste the exact registered local callback URL\");",
+                  "const params = {};",
+                  "for (const part of callback.slice(prefix.length).split(\"&\")) {",
+                  " const i = part.indexOf(\"=\");",
+                  " const key = decodeURIComponent(i < 0 ? part : part.slice(0, i));",
+                  " const value = decodeURIComponent((i < 0 ? \"\" : part.slice(i+1)).replace(/\\+/g, \" \"));",
+                  " if (Object.prototype.hasOwnProperty.call(params, key)) throw new Error(\"Duplicate callback parameter\");",
+                  " params[key] = value;",
+                  "}",
+                  "const state = pm.environment.get(\"payment_state\");",
+                  "if (!state || params.state !== state || !params.code || params.error) throw new Error(\"Missing code or invalid OAuth state\");",
+                  "if (!pm.environment.get(\"payment_code_verifier\")) throw new Error(\"Generate the private PKCE session first\");",
+                  "pm.variables.set(\"payment_authorization_code\", params.code);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"PKCE code exchanged\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  " const body = pm.response.json();",
+                  " pm.test(\"Bearer token\", () => pm.expect(body.token_type.toLowerCase()).to.eql(\"bearer\"));",
+                  " pm.environment.set(\"payment_token\", body.access_token);",
+                  " pm.environment.unset(\"payment_callback_url\");",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "01 \u2014 Anonymous health",
+      "item": [
+        {
+          "name": "Merchant health",
+          "request": {
+            "method": "GET",
+            "url": "{{merchant_base_url}}/actuator/health",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Expected 200. No Origin header. Do not replace a failed authentication test with an authorization claim."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Minimal healthy response\", function () { const b = pm.response.json(); pm.expect(b.status).to.eql(\"UP\"); pm.expect(b).not.to.have.property(\"components\"); pm.expect(b).not.to.have.property(\"details\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Payment health",
+          "request": {
+            "method": "GET",
+            "url": "{{payment_base_url}}/actuator/health",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Expected 200. No Origin header. Do not replace a failed authentication test with an authorization claim."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Minimal healthy response\", function () { const b = pm.response.json(); pm.expect(b.status).to.eql(\"UP\"); pm.expect(b).not.to.have.property(\"components\"); pm.expect(b).not.to.have.property(\"details\"); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 \u2014 Anonymous business rejection",
+      "item": [
+        {
+          "name": "Merchant anonymous create",
+          "request": {
+            "method": "POST",
+            "url": "{{merchant_base_url}}/api/v1/merchants",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Expected 401. No Origin header. Do not replace a failed authentication test with an authorization claim.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"merchantId\": \"MER-POSTMAN\",\n  \"businessName\": \"Postman Test Business\",\n  \"businessEmail\": \"postman@example.test\",\n  \"contactPhone\": \"+2348012345678\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 401\", function () { pm.response.to.have.status(401); });",
+                  "pm.test(\"Generic PayFlow security error\", function () {",
+                  " const body = pm.response.json();",
+                  " pm.expect(body.status).to.eql(401);",
+                  " pm.expect(body.message).to.eql(\"Bearer authentication is required\");",
+                  " pm.expect(body.details).to.eql([]);",
+                  " pm.expect(body.timestamp).to.be.a(\"string\");",
+                  " pm.expect(body.path).to.be.a(\"string\");",
+                  " pm.expect(pm.response.headers.get(\"Cache-Control\")).to.eql(\"no-store\");",
+                  "});",
+                  "pm.test(\"Bearer challenge\", () => pm.expect(pm.response.headers.get(\"WWW-Authenticate\")).to.eql(\"Bearer\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Merchant anonymous read",
+          "request": {
+            "method": "GET",
+            "url": "{{merchant_base_url}}/api/v1/merchants/00000000-0000-0000-0000-000000000001",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Expected 401. No Origin header. Do not replace a failed authentication test with an authorization claim."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 401\", function () { pm.response.to.have.status(401); });",
+                  "pm.test(\"Generic PayFlow security error\", function () {",
+                  " const body = pm.response.json();",
+                  " pm.expect(body.status).to.eql(401);",
+                  " pm.expect(body.message).to.eql(\"Bearer authentication is required\");",
+                  " pm.expect(body.details).to.eql([]);",
+                  " pm.expect(body.timestamp).to.be.a(\"string\");",
+                  " pm.expect(body.path).to.be.a(\"string\");",
+                  " pm.expect(pm.response.headers.get(\"Cache-Control\")).to.eql(\"no-store\");",
+                  "});",
+                  "pm.test(\"Bearer challenge\", () => pm.expect(pm.response.headers.get(\"WWW-Authenticate\")).to.eql(\"Bearer\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Payment anonymous create",
+          "request": {
+            "method": "POST",
+            "url": "{{payment_base_url}}/api/v1/payments",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "postman-slice2-denied"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Expected 401. No Origin header. Do not replace a failed authentication test with an authorization claim.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"merchantId\": \"MER-POSTMAN\",\n  \"reference\": \"POSTMAN-SLICE2-DENIED\",\n  \"amount\": 100.0,\n  \"currency\": \"NGN\",\n  \"description\": \"Must be denied before persistence\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 401\", function () { pm.response.to.have.status(401); });",
+                  "pm.test(\"Generic PayFlow security error\", function () {",
+                  " const body = pm.response.json();",
+                  " pm.expect(body.status).to.eql(401);",
+                  " pm.expect(body.message).to.eql(\"Bearer authentication is required\");",
+                  " pm.expect(body.details).to.eql([]);",
+                  " pm.expect(body.timestamp).to.be.a(\"string\");",
+                  " pm.expect(body.path).to.be.a(\"string\");",
+                  " pm.expect(pm.response.headers.get(\"Cache-Control\")).to.eql(\"no-store\");",
+                  "});",
+                  "pm.test(\"Bearer challenge\", () => pm.expect(pm.response.headers.get(\"WWW-Authenticate\")).to.eql(\"Bearer\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Payment anonymous read",
+          "request": {
+            "method": "GET",
+            "url": "{{payment_base_url}}/api/v1/payments/00000000-0000-0000-0000-000000000001",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Expected 401. No Origin header. Do not replace a failed authentication test with an authorization claim."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 401\", function () { pm.response.to.have.status(401); });",
+                  "pm.test(\"Generic PayFlow security error\", function () {",
+                  " const body = pm.response.json();",
+                  " pm.expect(body.status).to.eql(401);",
+                  " pm.expect(body.message).to.eql(\"Bearer authentication is required\");",
+                  " pm.expect(body.details).to.eql([]);",
+                  " pm.expect(body.timestamp).to.be.a(\"string\");",
+                  " pm.expect(body.path).to.be.a(\"string\");",
+                  " pm.expect(pm.response.headers.get(\"Cache-Control\")).to.eql(\"no-store\");",
+                  "});",
+                  "pm.test(\"Bearer challenge\", () => pm.expect(pm.response.headers.get(\"WWW-Authenticate\")).to.eql(\"Bearer\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 \u2014 Valid JWT still denied",
+      "item": [
+        {
+          "name": "Merchant valid JWT create denied",
+          "request": {
+            "method": "POST",
+            "url": "{{merchant_base_url}}/api/v1/merchants",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{merchant_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Expected 403. No Origin header. Do not replace a failed authentication test with an authorization claim.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"merchantId\": \"MER-POSTMAN\",\n  \"businessName\": \"Postman Test Business\",\n  \"businessEmail\": \"postman@example.test\",\n  \"contactPhone\": \"+2348012345678\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get(\"merchant_token\")) throw new Error(\"Obtain the required fresh local token first: merchant_token\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Generic PayFlow security error\", function () {",
+                  " const body = pm.response.json();",
+                  " pm.expect(body.status).to.eql(403);",
+                  " pm.expect(body.message).to.eql(\"Access is denied\");",
+                  " pm.expect(body.details).to.eql([]);",
+                  " pm.expect(body.timestamp).to.be.a(\"string\");",
+                  " pm.expect(body.path).to.be.a(\"string\");",
+                  " pm.expect(pm.response.headers.get(\"Cache-Control\")).to.eql(\"no-store\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Merchant valid JWT read denied",
+          "request": {
+            "method": "GET",
+            "url": "{{merchant_base_url}}/api/v1/merchants/00000000-0000-0000-0000-000000000001",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{merchant_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Expected 403. No Origin header. Do not replace a failed authentication test with an authorization claim."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get(\"merchant_token\")) throw new Error(\"Obtain the required fresh local token first: merchant_token\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Generic PayFlow security error\", function () {",
+                  " const body = pm.response.json();",
+                  " pm.expect(body.status).to.eql(403);",
+                  " pm.expect(body.message).to.eql(\"Access is denied\");",
+                  " pm.expect(body.details).to.eql([]);",
+                  " pm.expect(body.timestamp).to.be.a(\"string\");",
+                  " pm.expect(body.path).to.be.a(\"string\");",
+                  " pm.expect(pm.response.headers.get(\"Cache-Control\")).to.eql(\"no-store\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Payment valid JWT create denied",
+          "request": {
+            "method": "POST",
+            "url": "{{payment_base_url}}/api/v1/payments",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "postman-slice2-denied"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{payment_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Expected 403. No Origin header. Do not replace a failed authentication test with an authorization claim.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"merchantId\": \"MER-POSTMAN\",\n  \"reference\": \"POSTMAN-SLICE2-DENIED\",\n  \"amount\": 100.0,\n  \"currency\": \"NGN\",\n  \"description\": \"Must be denied before persistence\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get(\"payment_token\")) throw new Error(\"Obtain the required fresh local token first: payment_token\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Generic PayFlow security error\", function () {",
+                  " const body = pm.response.json();",
+                  " pm.expect(body.status).to.eql(403);",
+                  " pm.expect(body.message).to.eql(\"Access is denied\");",
+                  " pm.expect(body.details).to.eql([]);",
+                  " pm.expect(body.timestamp).to.be.a(\"string\");",
+                  " pm.expect(body.path).to.be.a(\"string\");",
+                  " pm.expect(pm.response.headers.get(\"Cache-Control\")).to.eql(\"no-store\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Payment valid JWT read denied",
+          "request": {
+            "method": "GET",
+            "url": "{{payment_base_url}}/api/v1/payments/00000000-0000-0000-0000-000000000001",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{payment_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Expected 403. No Origin header. Do not replace a failed authentication test with an authorization claim."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get(\"payment_token\")) throw new Error(\"Obtain the required fresh local token first: payment_token\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Generic PayFlow security error\", function () {",
+                  " const body = pm.response.json();",
+                  " pm.expect(body.status).to.eql(403);",
+                  " pm.expect(body.message).to.eql(\"Access is denied\");",
+                  " pm.expect(body.details).to.eql([]);",
+                  " pm.expect(body.timestamp).to.be.a(\"string\");",
+                  " pm.expect(body.path).to.be.a(\"string\");",
+                  " pm.expect(pm.response.headers.get(\"Cache-Control\")).to.eql(\"no-store\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "04 \u2014 Invalid and wrong-audience JWTs",
+      "item": [
+        {
+          "name": "Merchant invalid JWT",
+          "request": {
+            "method": "GET",
+            "url": "{{merchant_base_url}}/api/v1/merchants",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "not-a-valid-jwt",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Expected 401. No Origin header. Do not replace a failed authentication test with an authorization claim."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 401\", function () { pm.response.to.have.status(401); });",
+                  "pm.test(\"Generic PayFlow security error\", function () {",
+                  " const body = pm.response.json();",
+                  " pm.expect(body.status).to.eql(401);",
+                  " pm.expect(body.message).to.eql(\"Bearer authentication is required\");",
+                  " pm.expect(body.details).to.eql([]);",
+                  " pm.expect(body.timestamp).to.be.a(\"string\");",
+                  " pm.expect(body.path).to.be.a(\"string\");",
+                  " pm.expect(pm.response.headers.get(\"Cache-Control\")).to.eql(\"no-store\");",
+                  "});",
+                  "pm.test(\"Bearer challenge\", () => pm.expect(pm.response.headers.get(\"WWW-Authenticate\")).to.eql(\"Bearer\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Merchant wrong audience",
+          "request": {
+            "method": "GET",
+            "url": "{{merchant_base_url}}/api/v1/merchants",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{payment_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Expected 401. No Origin header. Do not replace a failed authentication test with an authorization claim."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get(\"payment_token\")) throw new Error(\"Obtain the required fresh local token first: payment_token\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 401\", function () { pm.response.to.have.status(401); });",
+                  "pm.test(\"Generic PayFlow security error\", function () {",
+                  " const body = pm.response.json();",
+                  " pm.expect(body.status).to.eql(401);",
+                  " pm.expect(body.message).to.eql(\"Bearer authentication is required\");",
+                  " pm.expect(body.details).to.eql([]);",
+                  " pm.expect(body.timestamp).to.be.a(\"string\");",
+                  " pm.expect(body.path).to.be.a(\"string\");",
+                  " pm.expect(pm.response.headers.get(\"Cache-Control\")).to.eql(\"no-store\");",
+                  "});",
+                  "pm.test(\"Bearer challenge\", () => pm.expect(pm.response.headers.get(\"WWW-Authenticate\")).to.eql(\"Bearer\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Merchant invalid bearer on health",
+          "request": {
+            "method": "GET",
+            "url": "{{merchant_base_url}}/actuator/health",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "not-a-valid-jwt",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Expected 401. No Origin header. Do not replace a failed authentication test with an authorization claim."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 401\", function () { pm.response.to.have.status(401); });",
+                  "pm.test(\"Generic PayFlow security error\", function () {",
+                  " const body = pm.response.json();",
+                  " pm.expect(body.status).to.eql(401);",
+                  " pm.expect(body.message).to.eql(\"Bearer authentication is required\");",
+                  " pm.expect(body.details).to.eql([]);",
+                  " pm.expect(body.timestamp).to.be.a(\"string\");",
+                  " pm.expect(body.path).to.be.a(\"string\");",
+                  " pm.expect(pm.response.headers.get(\"Cache-Control\")).to.eql(\"no-store\");",
+                  "});",
+                  "pm.test(\"Bearer challenge\", () => pm.expect(pm.response.headers.get(\"WWW-Authenticate\")).to.eql(\"Bearer\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Payment invalid JWT",
+          "request": {
+            "method": "GET",
+            "url": "{{payment_base_url}}/api/v1/payments",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "not-a-valid-jwt",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Expected 401. No Origin header. Do not replace a failed authentication test with an authorization claim."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 401\", function () { pm.response.to.have.status(401); });",
+                  "pm.test(\"Generic PayFlow security error\", function () {",
+                  " const body = pm.response.json();",
+                  " pm.expect(body.status).to.eql(401);",
+                  " pm.expect(body.message).to.eql(\"Bearer authentication is required\");",
+                  " pm.expect(body.details).to.eql([]);",
+                  " pm.expect(body.timestamp).to.be.a(\"string\");",
+                  " pm.expect(body.path).to.be.a(\"string\");",
+                  " pm.expect(pm.response.headers.get(\"Cache-Control\")).to.eql(\"no-store\");",
+                  "});",
+                  "pm.test(\"Bearer challenge\", () => pm.expect(pm.response.headers.get(\"WWW-Authenticate\")).to.eql(\"Bearer\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Payment wrong audience",
+          "request": {
+            "method": "GET",
+            "url": "{{payment_base_url}}/api/v1/payments",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{merchant_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Expected 401. No Origin header. Do not replace a failed authentication test with an authorization claim."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get(\"merchant_token\")) throw new Error(\"Obtain the required fresh local token first: merchant_token\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 401\", function () { pm.response.to.have.status(401); });",
+                  "pm.test(\"Generic PayFlow security error\", function () {",
+                  " const body = pm.response.json();",
+                  " pm.expect(body.status).to.eql(401);",
+                  " pm.expect(body.message).to.eql(\"Bearer authentication is required\");",
+                  " pm.expect(body.details).to.eql([]);",
+                  " pm.expect(body.timestamp).to.be.a(\"string\");",
+                  " pm.expect(body.path).to.be.a(\"string\");",
+                  " pm.expect(pm.response.headers.get(\"Cache-Control\")).to.eql(\"no-store\");",
+                  "});",
+                  "pm.test(\"Bearer challenge\", () => pm.expect(pm.response.headers.get(\"WWW-Authenticate\")).to.eql(\"Bearer\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Payment invalid bearer on health",
+          "request": {
+            "method": "GET",
+            "url": "{{payment_base_url}}/actuator/health",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "not-a-valid-jwt",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Expected 401. No Origin header. Do not replace a failed authentication test with an authorization claim."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 401\", function () { pm.response.to.have.status(401); });",
+                  "pm.test(\"Generic PayFlow security error\", function () {",
+                  " const body = pm.response.json();",
+                  " pm.expect(body.status).to.eql(401);",
+                  " pm.expect(body.message).to.eql(\"Bearer authentication is required\");",
+                  " pm.expect(body.details).to.eql([]);",
+                  " pm.expect(body.timestamp).to.be.a(\"string\");",
+                  " pm.expect(body.path).to.be.a(\"string\");",
+                  " pm.expect(pm.response.headers.get(\"Cache-Control\")).to.eql(\"no-store\");",
+                  "});",
+                  "pm.test(\"Bearer challenge\", () => pm.expect(pm.response.headers.get(\"WWW-Authenticate\")).to.eql(\"Bearer\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "05 \u2014 Management and unknown routes",
+      "item": [
+        {
+          "name": "Merchant anonymous /actuator/info",
+          "request": {
+            "method": "GET",
+            "url": "{{merchant_base_url}}/actuator/info",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Expected 401. No Origin header. Do not replace a failed authentication test with an authorization claim."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 401\", function () { pm.response.to.have.status(401); });",
+                  "pm.test(\"Generic PayFlow security error\", function () {",
+                  " const body = pm.response.json();",
+                  " pm.expect(body.status).to.eql(401);",
+                  " pm.expect(body.message).to.eql(\"Bearer authentication is required\");",
+                  " pm.expect(body.details).to.eql([]);",
+                  " pm.expect(body.timestamp).to.be.a(\"string\");",
+                  " pm.expect(body.path).to.be.a(\"string\");",
+                  " pm.expect(pm.response.headers.get(\"Cache-Control\")).to.eql(\"no-store\");",
+                  "});",
+                  "pm.test(\"Bearer challenge\", () => pm.expect(pm.response.headers.get(\"WWW-Authenticate\")).to.eql(\"Bearer\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Merchant valid JWT /actuator/info",
+          "request": {
+            "method": "GET",
+            "url": "{{merchant_base_url}}/actuator/info",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{merchant_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Expected 403. No Origin header. Do not replace a failed authentication test with an authorization claim."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get(\"merchant_token\")) throw new Error(\"Obtain the required fresh local token first: merchant_token\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Generic PayFlow security error\", function () {",
+                  " const body = pm.response.json();",
+                  " pm.expect(body.status).to.eql(403);",
+                  " pm.expect(body.message).to.eql(\"Access is denied\");",
+                  " pm.expect(body.details).to.eql([]);",
+                  " pm.expect(body.timestamp).to.be.a(\"string\");",
+                  " pm.expect(body.path).to.be.a(\"string\");",
+                  " pm.expect(pm.response.headers.get(\"Cache-Control\")).to.eql(\"no-store\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Merchant anonymous /actuator",
+          "request": {
+            "method": "GET",
+            "url": "{{merchant_base_url}}/actuator",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Expected 401. No Origin header. Do not replace a failed authentication test with an authorization claim."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 401\", function () { pm.response.to.have.status(401); });",
+                  "pm.test(\"Generic PayFlow security error\", function () {",
+                  " const body = pm.response.json();",
+                  " pm.expect(body.status).to.eql(401);",
+                  " pm.expect(body.message).to.eql(\"Bearer authentication is required\");",
+                  " pm.expect(body.details).to.eql([]);",
+                  " pm.expect(body.timestamp).to.be.a(\"string\");",
+                  " pm.expect(body.path).to.be.a(\"string\");",
+                  " pm.expect(pm.response.headers.get(\"Cache-Control\")).to.eql(\"no-store\");",
+                  "});",
+                  "pm.test(\"Bearer challenge\", () => pm.expect(pm.response.headers.get(\"WWW-Authenticate\")).to.eql(\"Bearer\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Merchant valid JWT /actuator",
+          "request": {
+            "method": "GET",
+            "url": "{{merchant_base_url}}/actuator",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{merchant_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Expected 403. No Origin header. Do not replace a failed authentication test with an authorization claim."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get(\"merchant_token\")) throw new Error(\"Obtain the required fresh local token first: merchant_token\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Generic PayFlow security error\", function () {",
+                  " const body = pm.response.json();",
+                  " pm.expect(body.status).to.eql(403);",
+                  " pm.expect(body.message).to.eql(\"Access is denied\");",
+                  " pm.expect(body.details).to.eql([]);",
+                  " pm.expect(body.timestamp).to.be.a(\"string\");",
+                  " pm.expect(body.path).to.be.a(\"string\");",
+                  " pm.expect(pm.response.headers.get(\"Cache-Control\")).to.eql(\"no-store\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Merchant anonymous /actuator/health/readiness",
+          "request": {
+            "method": "GET",
+            "url": "{{merchant_base_url}}/actuator/health/readiness",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Expected 401. No Origin header. Do not replace a failed authentication test with an authorization claim."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 401\", function () { pm.response.to.have.status(401); });",
+                  "pm.test(\"Generic PayFlow security error\", function () {",
+                  " const body = pm.response.json();",
+                  " pm.expect(body.status).to.eql(401);",
+                  " pm.expect(body.message).to.eql(\"Bearer authentication is required\");",
+                  " pm.expect(body.details).to.eql([]);",
+                  " pm.expect(body.timestamp).to.be.a(\"string\");",
+                  " pm.expect(body.path).to.be.a(\"string\");",
+                  " pm.expect(pm.response.headers.get(\"Cache-Control\")).to.eql(\"no-store\");",
+                  "});",
+                  "pm.test(\"Bearer challenge\", () => pm.expect(pm.response.headers.get(\"WWW-Authenticate\")).to.eql(\"Bearer\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Merchant valid JWT /actuator/health/readiness",
+          "request": {
+            "method": "GET",
+            "url": "{{merchant_base_url}}/actuator/health/readiness",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{merchant_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Expected 403. No Origin header. Do not replace a failed authentication test with an authorization claim."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get(\"merchant_token\")) throw new Error(\"Obtain the required fresh local token first: merchant_token\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Generic PayFlow security error\", function () {",
+                  " const body = pm.response.json();",
+                  " pm.expect(body.status).to.eql(403);",
+                  " pm.expect(body.message).to.eql(\"Access is denied\");",
+                  " pm.expect(body.details).to.eql([]);",
+                  " pm.expect(body.timestamp).to.be.a(\"string\");",
+                  " pm.expect(body.path).to.be.a(\"string\");",
+                  " pm.expect(pm.response.headers.get(\"Cache-Control\")).to.eql(\"no-store\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Merchant anonymous /not-a-real-route",
+          "request": {
+            "method": "GET",
+            "url": "{{merchant_base_url}}/not-a-real-route",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Expected 401. No Origin header. Do not replace a failed authentication test with an authorization claim."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 401\", function () { pm.response.to.have.status(401); });",
+                  "pm.test(\"Generic PayFlow security error\", function () {",
+                  " const body = pm.response.json();",
+                  " pm.expect(body.status).to.eql(401);",
+                  " pm.expect(body.message).to.eql(\"Bearer authentication is required\");",
+                  " pm.expect(body.details).to.eql([]);",
+                  " pm.expect(body.timestamp).to.be.a(\"string\");",
+                  " pm.expect(body.path).to.be.a(\"string\");",
+                  " pm.expect(pm.response.headers.get(\"Cache-Control\")).to.eql(\"no-store\");",
+                  "});",
+                  "pm.test(\"Bearer challenge\", () => pm.expect(pm.response.headers.get(\"WWW-Authenticate\")).to.eql(\"Bearer\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Merchant valid JWT /not-a-real-route",
+          "request": {
+            "method": "GET",
+            "url": "{{merchant_base_url}}/not-a-real-route",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{merchant_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Expected 403. No Origin header. Do not replace a failed authentication test with an authorization claim."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get(\"merchant_token\")) throw new Error(\"Obtain the required fresh local token first: merchant_token\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Generic PayFlow security error\", function () {",
+                  " const body = pm.response.json();",
+                  " pm.expect(body.status).to.eql(403);",
+                  " pm.expect(body.message).to.eql(\"Access is denied\");",
+                  " pm.expect(body.details).to.eql([]);",
+                  " pm.expect(body.timestamp).to.be.a(\"string\");",
+                  " pm.expect(body.path).to.be.a(\"string\");",
+                  " pm.expect(pm.response.headers.get(\"Cache-Control\")).to.eql(\"no-store\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Payment anonymous /actuator/info",
+          "request": {
+            "method": "GET",
+            "url": "{{payment_base_url}}/actuator/info",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Expected 401. No Origin header. Do not replace a failed authentication test with an authorization claim."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 401\", function () { pm.response.to.have.status(401); });",
+                  "pm.test(\"Generic PayFlow security error\", function () {",
+                  " const body = pm.response.json();",
+                  " pm.expect(body.status).to.eql(401);",
+                  " pm.expect(body.message).to.eql(\"Bearer authentication is required\");",
+                  " pm.expect(body.details).to.eql([]);",
+                  " pm.expect(body.timestamp).to.be.a(\"string\");",
+                  " pm.expect(body.path).to.be.a(\"string\");",
+                  " pm.expect(pm.response.headers.get(\"Cache-Control\")).to.eql(\"no-store\");",
+                  "});",
+                  "pm.test(\"Bearer challenge\", () => pm.expect(pm.response.headers.get(\"WWW-Authenticate\")).to.eql(\"Bearer\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Payment valid JWT /actuator/info",
+          "request": {
+            "method": "GET",
+            "url": "{{payment_base_url}}/actuator/info",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{payment_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Expected 403. No Origin header. Do not replace a failed authentication test with an authorization claim."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get(\"payment_token\")) throw new Error(\"Obtain the required fresh local token first: payment_token\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Generic PayFlow security error\", function () {",
+                  " const body = pm.response.json();",
+                  " pm.expect(body.status).to.eql(403);",
+                  " pm.expect(body.message).to.eql(\"Access is denied\");",
+                  " pm.expect(body.details).to.eql([]);",
+                  " pm.expect(body.timestamp).to.be.a(\"string\");",
+                  " pm.expect(body.path).to.be.a(\"string\");",
+                  " pm.expect(pm.response.headers.get(\"Cache-Control\")).to.eql(\"no-store\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Payment anonymous /actuator",
+          "request": {
+            "method": "GET",
+            "url": "{{payment_base_url}}/actuator",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Expected 401. No Origin header. Do not replace a failed authentication test with an authorization claim."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 401\", function () { pm.response.to.have.status(401); });",
+                  "pm.test(\"Generic PayFlow security error\", function () {",
+                  " const body = pm.response.json();",
+                  " pm.expect(body.status).to.eql(401);",
+                  " pm.expect(body.message).to.eql(\"Bearer authentication is required\");",
+                  " pm.expect(body.details).to.eql([]);",
+                  " pm.expect(body.timestamp).to.be.a(\"string\");",
+                  " pm.expect(body.path).to.be.a(\"string\");",
+                  " pm.expect(pm.response.headers.get(\"Cache-Control\")).to.eql(\"no-store\");",
+                  "});",
+                  "pm.test(\"Bearer challenge\", () => pm.expect(pm.response.headers.get(\"WWW-Authenticate\")).to.eql(\"Bearer\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Payment valid JWT /actuator",
+          "request": {
+            "method": "GET",
+            "url": "{{payment_base_url}}/actuator",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{payment_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Expected 403. No Origin header. Do not replace a failed authentication test with an authorization claim."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get(\"payment_token\")) throw new Error(\"Obtain the required fresh local token first: payment_token\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Generic PayFlow security error\", function () {",
+                  " const body = pm.response.json();",
+                  " pm.expect(body.status).to.eql(403);",
+                  " pm.expect(body.message).to.eql(\"Access is denied\");",
+                  " pm.expect(body.details).to.eql([]);",
+                  " pm.expect(body.timestamp).to.be.a(\"string\");",
+                  " pm.expect(body.path).to.be.a(\"string\");",
+                  " pm.expect(pm.response.headers.get(\"Cache-Control\")).to.eql(\"no-store\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Payment anonymous /actuator/health/readiness",
+          "request": {
+            "method": "GET",
+            "url": "{{payment_base_url}}/actuator/health/readiness",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Expected 401. No Origin header. Do not replace a failed authentication test with an authorization claim."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 401\", function () { pm.response.to.have.status(401); });",
+                  "pm.test(\"Generic PayFlow security error\", function () {",
+                  " const body = pm.response.json();",
+                  " pm.expect(body.status).to.eql(401);",
+                  " pm.expect(body.message).to.eql(\"Bearer authentication is required\");",
+                  " pm.expect(body.details).to.eql([]);",
+                  " pm.expect(body.timestamp).to.be.a(\"string\");",
+                  " pm.expect(body.path).to.be.a(\"string\");",
+                  " pm.expect(pm.response.headers.get(\"Cache-Control\")).to.eql(\"no-store\");",
+                  "});",
+                  "pm.test(\"Bearer challenge\", () => pm.expect(pm.response.headers.get(\"WWW-Authenticate\")).to.eql(\"Bearer\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Payment valid JWT /actuator/health/readiness",
+          "request": {
+            "method": "GET",
+            "url": "{{payment_base_url}}/actuator/health/readiness",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{payment_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Expected 403. No Origin header. Do not replace a failed authentication test with an authorization claim."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get(\"payment_token\")) throw new Error(\"Obtain the required fresh local token first: payment_token\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Generic PayFlow security error\", function () {",
+                  " const body = pm.response.json();",
+                  " pm.expect(body.status).to.eql(403);",
+                  " pm.expect(body.message).to.eql(\"Access is denied\");",
+                  " pm.expect(body.details).to.eql([]);",
+                  " pm.expect(body.timestamp).to.be.a(\"string\");",
+                  " pm.expect(body.path).to.be.a(\"string\");",
+                  " pm.expect(pm.response.headers.get(\"Cache-Control\")).to.eql(\"no-store\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Payment anonymous /not-a-real-route",
+          "request": {
+            "method": "GET",
+            "url": "{{payment_base_url}}/not-a-real-route",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Expected 401. No Origin header. Do not replace a failed authentication test with an authorization claim."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 401\", function () { pm.response.to.have.status(401); });",
+                  "pm.test(\"Generic PayFlow security error\", function () {",
+                  " const body = pm.response.json();",
+                  " pm.expect(body.status).to.eql(401);",
+                  " pm.expect(body.message).to.eql(\"Bearer authentication is required\");",
+                  " pm.expect(body.details).to.eql([]);",
+                  " pm.expect(body.timestamp).to.be.a(\"string\");",
+                  " pm.expect(body.path).to.be.a(\"string\");",
+                  " pm.expect(pm.response.headers.get(\"Cache-Control\")).to.eql(\"no-store\");",
+                  "});",
+                  "pm.test(\"Bearer challenge\", () => pm.expect(pm.response.headers.get(\"WWW-Authenticate\")).to.eql(\"Bearer\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Payment valid JWT /not-a-real-route",
+          "request": {
+            "method": "GET",
+            "url": "{{payment_base_url}}/not-a-real-route",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{payment_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Expected 403. No Origin header. Do not replace a failed authentication test with an authorization claim."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get(\"payment_token\")) throw new Error(\"Obtain the required fresh local token first: payment_token\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Generic PayFlow security error\", function () {",
+                  " const body = pm.response.json();",
+                  " pm.expect(body.status).to.eql(403);",
+                  " pm.expect(body.message).to.eql(\"Access is denied\");",
+                  " pm.expect(body.details).to.eql([]);",
+                  " pm.expect(body.timestamp).to.be.a(\"string\");",
+                  " pm.expect(body.path).to.be.a(\"string\");",
+                  " pm.expect(pm.response.headers.get(\"Cache-Control\")).to.eql(\"no-store\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

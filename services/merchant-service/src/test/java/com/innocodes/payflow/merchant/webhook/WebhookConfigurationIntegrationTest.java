@@ -67,9 +67,6 @@ class WebhookConfigurationIntegrationTest {
     @Autowired org.springframework.transaction.PlatformTransactionManager tx;
     @Autowired tools.jackson.databind.json.JsonMapper mapper;
 
-    @org.springframework.beans.factory.annotation.Value("${local.server.port}")
-    int port;
-
     @Autowired MerchantService merchants;
     @Autowired WebhookConfigurationService webhooks;
 
@@ -225,24 +222,14 @@ class WebhookConfigurationIntegrationTest {
     @Test
     void shouldProvisionOnceActivateAndRotateWithoutSecretDisclosure() throws Exception {
         var m = merchant();
-        var response =
-                java.net.http.HttpClient.newHttpClient()
-                        .send(
-                                java.net.http.HttpRequest.newBuilder(
-                                                java.net.URI.create(
-                                                        "http://localhost:"
-                                                                + port
-                                                                + "/api/v1/merchants/"
-                                                                + m.id()
-                                                                + "/webhook/secrets"))
-                                        .POST(java.net.http.HttpRequest.BodyPublishers.noBody())
-                                        .build(),
-                                java.net.http.HttpResponse.BodyHandlers.ofString());
-        assertEquals(201, response.statusCode(), response.body());
-        assertEquals("no-store", response.headers().firstValue("Cache-Control").orElseThrow());
-        var first =
-                mapper.readValue(
-                        response.body(), com.innocodes.payflow.webhook.ProvisionedSecret.class);
+        // Exercise the development controller contract directly; real HTTP provisioning
+        // is deliberately denied until tenant authorization is implemented.
+        var localRequest = new org.springframework.mock.web.MockHttpServletRequest();
+        localRequest.setRemoteAddr("127.0.0.1");
+        var response = new DevelopmentSecretController(secrets).provision(m.id(), localRequest);
+        assertEquals(201, response.getStatusCode().value());
+        assertEquals("no-store", response.getHeaders().getCacheControl());
+        var first = java.util.Objects.requireNonNull(response.getBody());
         merchants.activate(m.id(), m.version());
         var config =
                 webhooks.update(

@@ -17,6 +17,7 @@
     <description>Durable signed merchant webhook delivery</description>
 
     <dependencies>
+        <dependency><groupId>com.innocodes.payflow</groupId><artifactId>security-support</artifactId><version>${project.version}</version></dependency>
         <dependency><groupId>com.innocodes.payflow</groupId><artifactId>webhook-support</artifactId><version>${project.version}</version></dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
