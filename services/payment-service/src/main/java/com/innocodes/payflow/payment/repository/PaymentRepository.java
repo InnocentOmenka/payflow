@@ -11,6 +11,7 @@ import org.springframework.data.repository.query.Param;
 import java.util.Optional;
 
 public interface PaymentRepository extends JpaRepository<Payment, UUID> {
+    Optional<Payment> findByIdAndMerchantId(UUID paymentId, String merchantId);
 
     boolean existsByMerchantIdAndReference(
             String merchantId,

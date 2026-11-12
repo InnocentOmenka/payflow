@@ -48,6 +48,12 @@ spring:
         ack-mode: manual
 
 
+payflow:
+  merchant-access:
+    base-url: ${PAYFLOW_MERCHANT_BASE_URL:http://localhost:8086}
+    token-uri: ${PAYFLOW_TOKEN_URI:${spring.security.oauth2.resourceserver.jwt.issuer-uri}/protocol/openid-connect/token}
+    client-secret: ${PAYFLOW_PAYMENT_SERVICE_SECRET:}
+
 server:
   port: 8081
 

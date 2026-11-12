@@ -1,6 +1,7 @@
 package com.innocodes.payflow.merchant.config;
 
 import com.innocodes.payflow.merchant.security.PlatformAuthorization;
+import com.innocodes.payflow.merchant.security.AccessResolverAuthorization;
 import com.innocodes.payflow.security.ResourceServerHttpSecurity;
 import com.innocodes.payflow.security.ResourceServerJwtConfiguration;
 import org.springframework.beans.factory.annotation.Value;
@@ -23,11 +24,18 @@ public class SecurityConfig {
     }
 
     @Bean
-    SecurityFilterChain merchantSecurity(HttpSecurity http, PlatformAuthorization platform,
+    AccessResolverAuthorization accessResolverAuthorization(@Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri}") String issuer) {
+        return new AccessResolverAuthorization(issuer);
+    }
+
+    @Bean
+    SecurityFilterChain merchantSecurity(HttpSecurity http, PlatformAuthorization platform, AccessResolverAuthorization resolver,
             @Value("${spring.security.oauth2.resourceserver.jwt.audiences}") String audience) throws Exception {
         return ResourceServerHttpSecurity.configure(http, audience)
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(HttpMethod.GET, "/actuator/health").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/internal/v1/merchant-access/resolve")
+                            .access((authentication, context) -> new AuthorizationDecision(resolver.allowed(authentication.get())))
                         .requestMatchers(HttpMethod.GET, "/api/v1/merchants/{merchantId}/memberships")
                             .access((authentication, context) -> new AuthorizationDecision(platform.allowed(authentication.get())))
                         .requestMatchers(HttpMethod.POST, "/api/v1/merchants/{merchantId}/memberships",

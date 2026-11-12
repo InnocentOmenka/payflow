@@ -120,12 +120,18 @@ public class PaymentService {
             );
         }
 
-        Payment payment = paymentRepository.findById(record.getPaymentId())
+        Payment payment = paymentRepository.findByIdAndMerchantId(record.getPaymentId(), record.getMerchantId())
                 .orElseThrow(() -> new IllegalStateException(
                         "Payment associated with idempotency record was not found"
                 ));
 
         return toPaymentResponse(payment);
+    }
+
+    @Transactional(readOnly = true)
+    public PaymentResponse getPaymentByIdAndMerchantId(UUID paymentId, String merchantId) {
+        return toPaymentResponse(paymentRepository.findByIdAndMerchantId(paymentId, merchantId)
+                .orElseThrow(() -> new PaymentNotFoundException("Resource not found")));
     }
 
     @Transactional(readOnly = true)

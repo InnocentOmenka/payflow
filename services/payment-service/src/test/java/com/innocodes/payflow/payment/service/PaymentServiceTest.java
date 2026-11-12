@@ -144,7 +144,7 @@ class PaymentServiceTest {
                         IDEMPOTENCY_KEY
                 )).thenReturn(Optional.of(existingRecord));
 
-        when(paymentRepository.findById(paymentId))
+        when(paymentRepository.findByIdAndMerchantId(paymentId, MERCHANT_ID))
                 .thenReturn(Optional.of(existingPayment));
 
         // Act
@@ -242,7 +242,7 @@ class PaymentServiceTest {
                 "Duplicate idempotency key"
         ));
 
-        when(paymentRepository.findById(paymentId))
+        when(paymentRepository.findByIdAndMerchantId(paymentId, MERCHANT_ID))
                 .thenReturn(Optional.of(existingPayment));
 
         // Act

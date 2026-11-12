@@ -5,7 +5,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.innocodes.payflow.payment.dto.request.CreatePaymentRequest;
 import com.innocodes.payflow.payment.dto.response.PaymentResponse;
-import com.innocodes.payflow.payment.service.PaymentService;
+import com.innocodes.payflow.payment.service.MerchantPaymentService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -17,9 +17,9 @@ import java.util.UUID;
 @RequestMapping("/api/v1/payments")
 public class PaymentController {
 
-    private final PaymentService paymentService;
+    private final MerchantPaymentService paymentService;
 
-    public PaymentController(PaymentService paymentService) {
+    public PaymentController(MerchantPaymentService paymentService) {
         this.paymentService = paymentService;
     }
 
