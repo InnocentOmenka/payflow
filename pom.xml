@@ -33,6 +33,15 @@
         <module>services/notification-service</module>
     </modules>
 
+    <profiles>
+        <profile>
+            <id>payment-lifecycle</id>
+            <modules>
+                <module>integration-tests/payment-lifecycle</module>
+            </modules>
+        </profile>
+    </profiles>
+
     <properties>
         <java.version>21</java.version>
         <maven.compiler.release>21</maven.compiler.release>
