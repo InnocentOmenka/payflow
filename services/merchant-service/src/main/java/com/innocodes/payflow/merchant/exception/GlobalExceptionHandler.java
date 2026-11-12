@@ -24,6 +24,18 @@ import java.util.List;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    @ExceptionHandler(org.springframework.security.core.AuthenticationException.class)
+    public void unauthorized(org.springframework.security.core.AuthenticationException exception,
+            HttpServletRequest request, jakarta.servlet.http.HttpServletResponse response) throws java.io.IOException, jakarta.servlet.ServletException {
+        com.innocodes.payflow.security.SecurityErrors.unauthorized().commence(request, response, exception);
+    }
+
+    @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
+    public void forbidden(org.springframework.security.access.AccessDeniedException exception,
+            HttpServletRequest request, jakarta.servlet.http.HttpServletResponse response) throws java.io.IOException, jakarta.servlet.ServletException {
+        com.innocodes.payflow.security.SecurityErrors.forbidden().handle(request, response, exception);
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiErrorResponse> validation(MethodArgumentNotValidException exception, HttpServletRequest request) {
         var details = exception.getBindingResult().getFieldErrors().stream()

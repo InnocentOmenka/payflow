@@ -7,3 +7,5 @@ databaseChangeLog:
       file: db/changelog/changes/003-create-webhook-secrets-outbox.yaml
   - include:
       file: db/changelog/changes/004-create-merchant-memberships.yaml
+  - include:
+      file: db/changelog/changes/005-create-membership-audit.yaml

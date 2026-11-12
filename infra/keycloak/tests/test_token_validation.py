@@ -56,6 +56,28 @@ class SignedTokenTest(unittest.TestCase):
             with self.subTest(change=change), self.assertRaises(ValueError):
                 self.validate(self.token(**change))
 
+    def test_static_per_condition_identifiers(self):
+        cases = [('issuer', dict(iss='https://other.invalid')),
+                 ('audience', dict(aud='payflow-payment-api')),
+                 ('client', dict(azp='other-client')), ('token-type', dict(typ='ID')),
+                 ('subject', dict(sub='')), ('time-expired', dict(exp=int(time.time()) - 10)),
+                 ('time-not-before', dict(nbf=int(time.time()) + 100)),
+                 ('time-issued-at', dict(iat=int(time.time()) + 100)), ('time-claims', dict(iat=None))]
+        for expected, changes in cases:
+            with self.subTest(condition=expected):
+                with self.assertRaises(validator.TokenValidationFailure) as failure:
+                    self.validate(self.token(**changes))
+                self.assertEqual(expected, failure.exception.condition)
+                self.assertEqual(validator.VALIDATION_MESSAGES[expected], str(failure.exception))
+
+    def test_signature_is_checked_before_claim_diagnostics(self):
+        token = self.token()
+        header, payload, signature = token.split('.')
+        claims = json.loads(validator.decode(payload)); claims['iss'] = 'https://other.invalid'
+        with self.assertRaises(validator.TokenValidationFailure) as failure:
+            self.validate(header + '.' + encoded(claims) + '.' + signature)
+        self.assertEqual('signature', failure.exception.condition)
+
     def test_payload_tampering_rejected(self):
         token = self.token()
         header, payload, signature = token.split('.')

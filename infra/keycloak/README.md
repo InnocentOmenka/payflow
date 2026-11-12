@@ -198,3 +198,6 @@ API authorization and production MFA enforcement belong to later approved slices
 - Interactive human browser login was not exercised; the PKCE/state/nonce helper
   and exact client settings are provided for that manual check. No real merchant
   users or production credentials were provisioned.
+
+For the current membership-administration scope and explicitly controlled private
+Postman token export, see [the dedicated platform-admin helper](PLATFORM-ADMIN-POSTMAN.md).

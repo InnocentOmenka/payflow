@@ -1,0 +1,45 @@
+databaseChangeLog:
+  - changeSet:
+      id: 005-create-membership-audit
+      author: payflow
+      changes:
+        - sql:
+            sql: |
+              CREATE TABLE merchant_membership_audit (
+                id UUID PRIMARY KEY,
+                membership_id UUID NOT NULL REFERENCES merchant_memberships(id),
+                merchant_uuid UUID NOT NULL REFERENCES merchants(id),
+                principal_issuer VARCHAR(512) NOT NULL,
+                principal_subject VARCHAR(255) NOT NULL,
+                action VARCHAR(20) NOT NULL CHECK (action IN ('GRANTED','ROLE_CHANGED','REVOKED')),
+                old_role VARCHAR(30) CHECK (old_role IS NULL OR old_role IN ('MERCHANT_ADMIN','MERCHANT_OPERATOR')),
+                new_role VARCHAR(30) NOT NULL CHECK (new_role IN ('MERCHANT_ADMIN','MERCHANT_OPERATOR')),
+                old_active BOOLEAN,
+                new_active BOOLEAN NOT NULL,
+                before_version BIGINT,
+                after_version BIGINT NOT NULL CHECK (after_version >= 0),
+                actor_issuer VARCHAR(512) NOT NULL CHECK (actor_issuer ~ '[^[:space:]]'),
+                actor_subject VARCHAR(255) NOT NULL CHECK (actor_subject ~ '[^[:space:]]'),
+                actor_client_id VARCHAR(100) NOT NULL CHECK (actor_client_id='payflow-platform-console'),
+                recorded_at TIMESTAMP WITH TIME ZONE NOT NULL,
+                CONSTRAINT uk_membership_audit_version UNIQUE (membership_id,after_version),
+                CONSTRAINT chk_membership_audit_change CHECK (
+                  (action='GRANTED' AND old_role IS NULL AND old_active IS NULL AND before_version IS NULL AND new_active AND after_version=0)
+                  OR (action='ROLE_CHANGED' AND old_role IS NOT NULL AND old_active IS NOT NULL AND before_version IS NOT NULL
+                    AND old_role<>new_role AND old_active=new_active AND after_version=before_version+1)
+                  OR (action='REVOKED' AND old_role IS NOT NULL AND old_active IS TRUE AND before_version IS NOT NULL
+                    AND new_active IS FALSE AND old_role=new_role AND after_version=before_version+1))
+              );
+              CREATE INDEX idx_membership_audit_merchant ON merchant_membership_audit(merchant_uuid,recorded_at,id);
+        - sql:
+            splitStatements: false
+            sql: |
+              CREATE FUNCTION reject_membership_audit_mutation() RETURNS trigger LANGUAGE plpgsql AS $$
+              BEGIN
+                RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='Membership audit records are append-only';
+              END;
+              $$;
+              CREATE TRIGGER membership_audit_no_update_delete BEFORE UPDATE OR DELETE ON merchant_membership_audit
+                FOR EACH ROW EXECUTE FUNCTION reject_membership_audit_mutation();
+              CREATE TRIGGER membership_audit_no_truncate BEFORE TRUNCATE ON merchant_membership_audit
+                FOR EACH STATEMENT EXECUTE FUNCTION reject_membership_audit_mutation();

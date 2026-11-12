@@ -44,6 +44,31 @@ class RealmContractTest(unittest.TestCase):
             self.assertNotIn('secret', c)
             self.assertNotIn('merchant.access.resolve', c['optionalClientScopes'])
 
+    def test_interactive_clients_always_emit_subject(self):
+        # Empty default scopes intentionally omit Keycloak basic; restore only its
+        # necessary identity mapper directly, without granting any permission.
+        for name in ('payflow-portal', 'payflow-platform-console'):
+            subject = [m for m in CLIENTS[name].get('protocolMappers', []) if m['protocolMapper'] == 'oidc-sub-mapper']
+            self.assertEqual(1, len(subject))
+            self.assertEqual('true', subject[0]['config']['access.token.claim'])
+            self.assertEqual('true', subject[0]['config']['introspection.token.claim'])
+            self.assertEqual('openid-connect', subject[0]['protocol'])
+            self.assertFalse(subject[0]['consentRequired'])
+            self.assertEqual([], CLIENTS[name]['defaultClientScopes'])
+            self.assertNotIn('usermodel.property', subject[0]['config'])
+            self.assertNotIn('claim.value', subject[0]['config'])
+
+    def test_platform_scope_retains_explicit_merchant_audience(self):
+        console = CLIENTS['payflow-platform-console']
+        self.assertIn('merchant.bindings.manage', console['optionalClientScopes'])
+        scope = SCOPES['merchant.bindings.manage']
+        audience = next(m for m in scope['protocolMappers'] if m['protocolMapper'] == 'oidc-audience-mapper')
+        self.assertEqual('payflow-merchant-api', audience['config']['included.client.audience'])
+        self.assertEqual('true', audience['config']['access.token.claim'])
+        self.assertEqual('false', audience['config']['id.token.claim'])
+        mapping = next(m for m in REALM['clientScopeMappings']['payflow-merchant-api'] if m['clientScope'] == scope['name'])
+        self.assertEqual(['platform-admin'], mapping['roles'])
+
     def test_resource_clients_cannot_login(self):
         for name in ('payflow-merchant-api', 'payflow-payment-api'):
             c = CLIENTS[name]

@@ -10,4 +10,6 @@ import java.util.UUID;
 public interface MerchantMembershipRepository extends JpaRepository<MerchantMembership, UUID> {
     Optional<MerchantMembership> findByIssuerAndSubject(String issuer, String subject);
     List<MerchantMembership> findByMerchantId(UUID merchantId);
+    org.springframework.data.domain.Page<MerchantMembership> findByMerchantId(UUID merchantId, org.springframework.data.domain.Pageable pageable);
+    Optional<MerchantMembership> findByIdAndMerchantId(UUID id, UUID merchantId);
 }

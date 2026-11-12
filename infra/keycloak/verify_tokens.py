@@ -4,6 +4,7 @@ Requires Python 3 and OpenSSL. Does not configure PayFlow services.
 import base64
 import hashlib
 import json
+import math
 import secrets
 import subprocess
 import tempfile
@@ -37,32 +38,93 @@ def rsa_integer(value):
     return der(2, (b'\x00' if raw[0] & 0x80 else b'') + raw)
 
 
-def validate(token, audience, client, token_type='Bearer'):
-    header, payload, signature = token.split('.')
-    head = json.loads(decode(header))
-    claims = json.loads(decode(payload))
+VALIDATION_MESSAGES = {
+    'format': 'Invalid token format',
+    'algorithm': 'Unexpected signing algorithm',
+    'signing-key': 'No usable trusted signing key',
+    'signature-tool': 'Signature verification tool unavailable',
+    'signature': 'Invalid signature',
+    'issuer': 'Invalid issuer',
+    'audience': 'Missing or invalid audience',
+    'client': 'Invalid authorized client',
+    'token-type': 'Invalid token type',
+    'subject-missing': 'Required subject is absent',
+    'subject': 'Invalid subject',
+    'time-claims': 'Missing or invalid token timestamps',
+    'time-expired': 'Token expired',
+    'time-not-before': 'Token not yet valid',
+    'time-issued-at': 'Invalid issued-at time',
+}
+
+
+class TokenValidationFailure(ValueError):
+    """A static condition identifier only: never retains the JWT or claim values."""
+    def __init__(self, condition):
+        self.condition = condition if condition in VALIDATION_MESSAGES else 'format'
+        super().__init__(VALIDATION_MESSAGES[self.condition])
+
+
+def validate(token, audience, client, token_type='Bearer', fetch_json=None):
+    try:
+        header, payload, signature = token.split('.')
+        head = json.loads(decode(header))
+        claims = json.loads(decode(payload))
+        if not isinstance(head, dict) or not isinstance(claims, dict):
+            raise ValueError('Invalid shape')
+    except (ValueError, TypeError, AttributeError, UnicodeError):
+        raise TokenValidationFailure('format') from None
     if head.get('alg') != 'RS256':
-        raise ValueError('Unexpected signing algorithm')
-    keys = request_json(ISSUER + '/protocol/openid-connect/certs')['keys']
-    key = next(k for k in keys if k['kid'] == head['kid'] and k['kty'] == 'RSA' and k.get('use') == 'sig')
-    public = der(0x30, rsa_integer(key['n']) + rsa_integer(key['e']))
-    pem = b'-----BEGIN RSA PUBLIC KEY-----\n' + base64.encodebytes(public) + b'-----END RSA PUBLIC KEY-----\n'
-    with tempfile.TemporaryDirectory() as directory:
-        root = Path(directory)
-        (root / 'public.pem').write_bytes(pem)
-        (root / 'signature').write_bytes(decode(signature))
-        verified = subprocess.run(['openssl', 'dgst', '-sha256', '-verify', str(root / 'public.pem'), '-signature', str(root / 'signature')], input=(header + '.' + payload).encode(), capture_output=True)
-        if verified.returncode:
-            raise ValueError('Invalid signature')
-    now = time.time()
+        raise TokenValidationFailure('algorithm')
+    # Key fetching can provide its own safe transport diagnostic. Never use jku/x5u.
+    document = (fetch_json or request_json)(ISSUER + '/protocol/openid-connect/certs')
+    try:
+        key = next(k for k in document['keys'] if k['kid'] == head['kid'] and k['kty'] == 'RSA' and k.get('use') == 'sig'
+                   and k.get('alg', 'RS256') == 'RS256')
+        public = der(0x30, rsa_integer(key['n']) + rsa_integer(key['e']))
+        pem = b'-----BEGIN RSA PUBLIC KEY-----\n' + base64.encodebytes(public) + b'-----END RSA PUBLIC KEY-----\n'
+        signature_bytes = decode(signature)
+    except (KeyError, TypeError, ValueError, StopIteration):
+        raise TokenValidationFailure('signing-key') from None
+    try:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'public.pem').write_bytes(pem)
+            (root / 'signature').write_bytes(signature_bytes)
+            verified = subprocess.run(['openssl', 'dgst', '-sha256', '-verify', str(root / 'public.pem'), '-signature', str(root / 'signature')], input=(header + '.' + payload).encode(), capture_output=True)
+    except OSError:
+        raise TokenValidationFailure('signature-tool') from None
+    if verified.returncode:
+        raise TokenValidationFailure('signature')
+    # Claim-specific diagnostics only AFTER signature verification succeeds.
+    if claims.get('iss') != ISSUER:
+        raise TokenValidationFailure('issuer')
     audiences = claims.get('aud', [])
     if isinstance(audiences, str):
         audiences = [audiences]
-    if (claims.get('iss') != ISSUER or audience not in audiences or not claims.get('sub')
-            or claims.get('azp') != client or claims.get('typ') != token_type
-            or claims.get('exp', 0) <= now or claims.get('nbf', 0) > now
-            or claims.get('iat', now + 1) > now + 5):
-        raise ValueError('Invalid access-token claims')
+    if (not isinstance(audiences, list) or not audiences
+            or not all(isinstance(value, str) and value.strip() for value in audiences)
+            or audience not in audiences):
+        raise TokenValidationFailure('audience')
+    if claims.get('azp') != client:
+        raise TokenValidationFailure('client')
+    if claims.get('typ') != token_type:
+        raise TokenValidationFailure('token-type')
+    if 'sub' not in claims:
+        raise TokenValidationFailure('subject-missing')
+    if not isinstance(claims.get('sub'), str) or not claims['sub'].strip():
+        raise TokenValidationFailure('subject')
+    dates = [claims.get('exp'), claims.get('iat')]
+    if 'nbf' in claims:
+        dates.append(claims['nbf'])
+    if any(isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) for value in dates):
+        raise TokenValidationFailure('time-claims')
+    now = time.time()
+    if claims['exp'] <= now:
+        raise TokenValidationFailure('time-expired')
+    if claims.get('nbf', 0) > now:
+        raise TokenValidationFailure('time-not-before')
+    if claims['iat'] > now + 5 or claims['exp'] <= claims['iat']:
+        raise TokenValidationFailure('time-issued-at')
     return claims
 
 
