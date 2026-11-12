@@ -1,6 +1,28 @@
 spring:
   application:
     name: api-gateway
+  cloud:
+    gateway:
+      server:
+        webmvc:
+          routes:
+            - id: payment-create
+              uri: ${PAYFLOW_PAYMENT_SERVICE_URL:http://localhost:8081}
+              predicates:
+                - Path=/api/v1/payments
+                - Method=POST
+            - id: payment-retrieve
+              uri: ${PAYFLOW_PAYMENT_SERVICE_URL:http://localhost:8081}
+              predicates:
+                - Path=/api/v1/payments/{paymentId}
+                - Method=GET
+  http:
+    clients:
+      connect-timeout: ${PAYFLOW_GATEWAY_CONNECT_TIMEOUT:2s}
+      read-timeout: ${PAYFLOW_GATEWAY_RESPONSE_TIMEOUT:3s}
+      redirects: dont-follow
+      imperative:
+        factory: jdk
   security:
     oauth2:
       resourceserver:

@@ -1,75 +1,115 @@
-# API Gateway — Step 1
+# API Gateway — Payment routing
 
-Minimal Spring Cloud Gateway Server Web MVC application on Java 21 and Spring
-Boot 4.1.2. The gateway-local Spring Cloud 2025.1.4 BOM selects Gateway 5.0.4;
-other services' dependency management is unchanged. Spring's
-[compatibility matrix](https://spring.io/projects/spring-cloud/) supports Boot
-4.1.x with Cloud 2025.1.2 onward. The servlet
-[Gateway starter](https://docs.spring.io/spring-cloud-gateway/reference/spring-cloud-gateway-server-webmvc/starter.html)
-allows reuse of the existing shared servlet resource-server security.
+Spring Cloud Gateway Server Web MVC on Java 21, Spring Boot 4.1.2,
+Spring Cloud 2025.1.4 and Gateway 5.0.4. Dependencies remain gateway-local.
 
-There are **no proxy routes**. Exact `GET /actuator/health` is anonymous and returns
-minimal health status. All other requests are denied, including Payment, Merchant,
-internal paths, other Actuator paths and non-GET methods. Missing/rejected bearer
-authentication returns 401; an otherwise valid token returns 403. A valid token
-does not grant routing permission. Invalid bearer credentials are rejected even
-on the health path. No Basic/form login, session authentication or browser origin
-allowance is introduced.
+## Route and security contract
 
-The application imports `FailClosedResourceServerConfiguration` unchanged. This
-reuses trusted JWKS/RS256, issuer, audience, timestamps and access-token claim
-validation, plus the existing sanitized JSON errors and stateless setup.
+Only these Payment Controller endpoints are proxied, without path rewriting:
 
-## Build and run
+| Method and path | Required scope |
+| --- | --- |
+| POST `/api/v1/payments` | `payment.create` |
+| GET `/api/v1/payments/{paymentId}` | `payment.read` |
 
-From the repository root:
+Both require a framework-validated access token with trusted issuer/signature,
+Payment audience `payflow-payment-api`, `azp=payflow-portal`, and Payment API
+client role `merchant-admin` or `merchant-operator`. Both roles may perform both
+operations. Realm/other-API roles and platform-console/machine clients do not grant
+access. Missing/invalid JWTs return 401; insufficient capability or an unapproved
+route returns 403. Exact GET `/actuator/health` alone remains anonymous.
+Internal resolver routes, other management endpoints, unknown/nested paths and
+unapproved HTTP methods are not exposed. Browser-origin restrictions are unchanged.
+
+Gateway imports shared `ResourceServerJwtConfiguration` and calls the existing
+`ResourceServerHttpSecurity.configure(...)`; its own single security chain adds
+the two explicit operation grants before `anyRequest().denyAll()`. The shared
+fail-closed configuration itself was not modified. No new authentication system,
+service discovery, rate limiter, circuit breaker or retry filter is introduced.
+
+The original Authorization bearer header, Idempotency-Key, JSON body, query and
+Payment response status/body are forwarded. Servlet processing may normalize a
+JSON Content-Type by adding a UTF-8 charset. The outgoing header filter removes
+case-insensitive `X-User-*`, `X-Merchant-*`, `X-Principal-*`, `X-Authenticated-*`,
+and exact `X-User`, `X-Merchant`, `X-Principal`, `X-Role`, `X-Roles`, `X-Subject`,
+`X-Issuer` headers. These headers never establish identity. Gateway's existing
+untrusted Forwarded/X-Forwarded handling is retained.
+
+Payment independently validates the original JWT and still enters through its
+`MerchantPaymentService`: it resolves current membership through Merchant's
+machine-protected endpoint, checks lifecycle and creation ownership, and scopes
+retrieval by payment UUID plus merchant ID. No Payment/Merchant business logic,
+event contract, database schema or payment processing behavior changed.
+
+## Configuration and operation
+
+| Environment variable | Default |
+| --- | --- |
+| `GATEWAY_SERVER_PORT` | `8080` |
+| `PAYFLOW_PAYMENT_SERVICE_URL` | `http://localhost:8081` (actual Payment default) |
+| `PAYFLOW_GATEWAY_CONNECT_TIMEOUT` | `2s` |
+| `PAYFLOW_GATEWAY_RESPONSE_TIMEOUT` | `3s` |
+| `PAYFLOW_JWT_ISSUER` | `http://localhost:8180/realms/payflow` |
+| `PAYFLOW_JWT_JWK_SET_URI` | `http://localhost:8180/realms/payflow/protocol/openid-connect/certs` |
+| `PAYFLOW_GATEWAY_JWT_AUDIENCE` | `payflow-payment-api` |
+
+For Kubernetes, supply the Payment ClusterIP service URL and reachable JWKS while
+preserving the trusted issuer. No Kubernetes resources are created here. The
+upstream URL is trusted operator configuration, never taken from caller input.
+The configured JDK client does not follow redirects. Connect/response timeouts
+are bounded, and there are no automatic Gateway POST retries. A pre-response
+transport failure returns sanitized 502; a timeout returns sanitized 504. If an
+upstream streaming response has already committed, a late body failure may end
+that response rather than replace its status. A timeout does not prove Payment
+failed to commit: any deliberate client retry must reuse the same Idempotency-Key.
+
+Build/run from the repository root (check the selected port is free first):
 
 ```sh
 mvn -pl services/api-gateway -am package
 java -jar services/api-gateway/target/api-gateway-1.0.0-SNAPSHOT.jar
 ```
 
-This starts a new gateway only. It does not start or configure existing services,
-Keycloak, databases or Kafka. Check the selected port is free before starting it.
-No Keycloak contact is needed to start or serve health; token validation fetches
-the configured JWKS when required. No credentials or local `.env` files are read.
+This does not start or reconfigure Payment, Merchant, Keycloak, Kafka or databases.
+Application configuration reads no local `.env` file or stored bearer token.
 
-| Environment variable | Default |
-| --- | --- |
-| `GATEWAY_SERVER_PORT` | `8080` |
-| `PAYFLOW_JWT_ISSUER` | `http://localhost:8180/realms/payflow` |
-| `PAYFLOW_JWT_JWK_SET_URI` | `http://localhost:8180/realms/payflow/protocol/openid-connect/certs` |
-| `PAYFLOW_GATEWAY_JWT_AUDIENCE` | `payflow-payment-api` |
+## HTTP request flow
 
-Standard Boot configuration, including `SERVER_ADDRESS`, remains available.
-The existing Payment audience anticipates later Payment routes without adding a
-new Keycloak client/audience or widening any existing service's authorization.
-For container deployment, supply reachable JWKS and trusted issuer settings;
-localhost defaults are for development. Keep exact issuer validation enabled.
+1. Tomcat receives the request; the shared bearer authentication filter validates
+   the JWT using configured JWKS, issuer, audience, times and access-token claims.
+2. Gateway's security chain checks the exact HTTP method/path, portal client,
+   operation scope and API-specific role. Denied requests never reach upstream.
+3. The matching YAML route selects the configured Payment URL. The request-header
+   filter removes identity assertions while keeping the original bearer token.
+4. Gateway's bounded HTTP client forwards the original method/path/body/query and
+   Idempotency-Key. Payment performs its own authentication and tenant checks.
+5. Payment's status/body return to the caller; transport failures use the sanitized
+   Gateway error handler. No retry filter repeats a POST.
 
-## Focused tests
+## Focused tests and validation — 2026-11-12
 
 ```sh
 mvn -pl services/api-gateway -am test
 ```
 
-Tests start the actual embedded servlet server on a random loopback port and use
-ephemeral RSA keys/JWKS. They require neither Docker nor a running Keycloak.
-They verify minimal anonymous health, one security chain, empty Gateway route
-configuration, anonymous denial, valid-token denial, malformed/expired/wrong
-issuer/audience/signature/missing-subject rejection, method restrictions, spoofed
-identity headers and stateless error responses. A test-only internal handler must
-never execute, demonstrating denial before handler dispatch.
+Passed 107 tests, zero failures/errors/skips: shared security 59, Gateway 48.
+Tests use the real embedded Gateway, ephemeral RSA/JWKS and a local mock Payment
+server; no Docker, live Keycloak or application database is required. They check
+health, exactly two configured routes, both merchant roles, token/body/path/query
+and idempotency forwarding, identity-header stripping, operation scopes, client
+and role denial, unsupported methods, invalid JWTs, internal/unknown route denial,
+upstream rejection/status preservation, redirect non-following, connection loss,
+bounded timeout and one POST attempt on failures. Payment ownership itself is
+covered by the existing Slice 4 tests; the mock upstream does not replace that
+service boundary. Whitespace checks passed.
 
-Payment proxying, discovery, circuit breakers, rate limiting, Kubernetes manifests
-and additional filters are intentionally outside Step 1.
+## Changed files
 
-## Validation — 2026-11-12
-
-`mvn -pl services/api-gateway -am package` passed 87 tests with zero failures,
-errors or skips: shared security 59 and Gateway 28. Cloud's compatibility verifier
-remained enabled. The executable jar contains Gateway Web MVC 5.0.4 and no
-Spring WebFlux dependency. A separate jar smoke test on a random loopback port
-confirmed health 200 and Payment/internal path 401 with an unreachable test JWKS
-address; only that smoke-test process was stopped. No live services or databases
-were changed. Whitespace checks passed. No compatibility issues were observed.
+```text
+services/api-gateway/README.md
+services/api-gateway/src/main/java/com/innocodes/payflow/gateway/ApiGatewayApplication.java
+services/api-gateway/src/main/java/com/innocodes/payflow/gateway/GatewaySecurityConfiguration.java
+services/api-gateway/src/main/java/com/innocodes/payflow/gateway/GatewayUpstreamErrors.java
+services/api-gateway/src/main/resources/application.yml
+services/api-gateway/src/test/java/com/innocodes/payflow/gateway/GatewaySecurityIntegrationTest.java
+```
